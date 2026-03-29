@@ -608,10 +608,9 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
         async with semaphore:
             _check_cancel(project_id, 5)
             scene: dict = row.get("metadata") or {}
-            scene_num: int = row["scene_id"]
-            scene_id_str: str = scene.get(
-                "scene_id", f"scene_{scene_num:02d}"
-            )
+            scene_num: int = int(row["scene_id"])
+            default_scene_id = f"scene_{scene_num:02d}"
+            scene_id_str: str = scene.get("scene_id") or default_scene_id
             image_prompt: str = scene.get("image_prompt", "")
             video_prompt: str = scene.get("video_prompt", "slow pan right")
 
