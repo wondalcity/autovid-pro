@@ -1,17 +1,21 @@
-"""Image generation utility — DALL-E 3 (primary) or Stability AI.
+"""Image generation utility — DALL-E 3, Gemini Imagen 3, or Stability AI.
 
-Provider priority
------------------
-1. IMAGE_PROVIDER=dalle3  (default)  → requires OPENAI_API_KEY
-2. IMAGE_PROVIDER=stabilityai        → requires STABLE_DIFFUSION_API_KEY
+Provider priority (IMAGE_PROVIDER env var)
+------------------------------------------
+1. "dalle3"      (default) → OPENAI_API_KEY
+2. "gemini"                → GOOGLE_AI_API_KEY  (Imagen 3)
+3. "stabilityai"           → STABLE_DIFFUSION_API_KEY
+4. "auto"                  → tries all available providers in order
 
-If the selected provider's key is missing the function raises RuntimeError.
+Auto-fallback chain (always active):
+  Primary provider → next available provider → placeholder PNG
 
 Env vars
 --------
 OPENAI_API_KEY           — enables DALL-E 3
+GOOGLE_AI_API_KEY        — enables Gemini Imagen 3 (Google AI Studio)
 STABLE_DIFFUSION_API_KEY — enables Stability AI core API
-IMAGE_PROVIDER           — "dalle3" (default) | "stabilityai"
+IMAGE_PROVIDER           — "dalle3" (default) | "gemini" | "stabilityai" | "auto"
 """
 import base64
 import logging
@@ -46,6 +50,7 @@ def enhance_image_prompt(base_prompt: str, genre: str = "general") -> str:
     style_suffix = GENRE_STYLES.get(genre.lower(), GENRE_STYLES["general"])
     return f"{base_prompt}, {style_suffix} --ar 16:9"
 _SD_KEY = os.getenv("STABLE_DIFFUSION_API_KEY", "")
+_GOOGLE_AI_KEY = os.getenv("GOOGLE_AI_API_KEY", "")
 _PROVIDER = os.getenv("IMAGE_PROVIDER", "dalle3").lower()
 _STABILITY_URL = "https://api.stability.ai/v2beta/stable-image/generate/core"
 
@@ -133,6 +138,53 @@ async def _generate_stability(prompt: str, width: int, height: int) -> bytes:
         return resp.content
 
 
+# ─── Gemini Imagen 3 ──────────────────────────────────────────────────────────
+
+def _gemini_aspect(width: int, height: int) -> str:
+    ratio = width / height if height else 1.0
+    if ratio >= 1.6:
+        return "16:9"
+    if ratio >= 1.2:
+        return "4:3"
+    if ratio <= 0.65:
+        return "9:16"
+    if ratio <= 0.85:
+        return "3:4"
+    return "1:1"
+
+
+async def _generate_gemini(prompt: str, width: int, height: int) -> bytes:
+    """Generate an image via Google Gemini Imagen 3 (google-genai SDK)."""
+    if not _GOOGLE_AI_KEY:
+        raise RuntimeError("GOOGLE_AI_API_KEY is not set.")
+
+    import asyncio
+    from google import genai
+    from google.genai.types import GenerateImagesConfig
+
+    aspect = _gemini_aspect(width, height)
+    logger.info(f"[gemini] Generating image {aspect} — prompt: {prompt[:80]}…")
+
+    client = genai.Client(api_key=_GOOGLE_AI_KEY)
+
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(
+        None,
+        lambda: client.models.generate_images(
+            model="imagen-3.0-generate-001",
+            prompt=prompt,
+            config=GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio=aspect,
+                output_mime_type="image/png",
+            ),
+        ),
+    )
+    if not response.generated_images:
+        raise RuntimeError("Gemini Imagen returned no images")
+    return response.generated_images[0].image.image_bytes
+
+
 # ─── Placeholder generator (no external API required) ────────────────────────
 
 def _generate_placeholder(prompt: str, width: int, height: int) -> bytes:
@@ -181,48 +233,53 @@ async def generate_image(
     width: int = 1792,
     height: int = 1024,
     genre: str = "general",
+    provider_override: str = "",
 ) -> bytes:
-    """Generate an image from a text prompt, optionally enriched by genre style.
+    """Generate an image with automatic provider fallback.
 
-    Args:
-        prompt: Text description (English recommended for best results).
-        width:  Desired width in pixels  (mapped to nearest supported size).
-        height: Desired height in pixels (mapped to nearest supported size).
-        genre:  Content genre for automatic style enrichment — one of
-                "mystery", "finance", "history", "general" (default).
-                Pass ``genre=""`` to skip enrichment.
+    Provider order is determined by IMAGE_PROVIDER env var or provider_override.
+    If the primary provider fails (quota, billing, etc.) the next available
+    provider is tried automatically before falling back to a placeholder PNG.
 
-    Returns:
-        PNG image bytes.
-
-    Raises:
-        RuntimeError: If the required API key is missing or the call fails.
+    Fallback chain:
+      dalle3      → gemini → stabilityai → placeholder
+      gemini      → dalle3 → stabilityai → placeholder
+      stabilityai → dalle3 → gemini      → placeholder
+      auto        → dalle3 → gemini      → stabilityai → placeholder
     """
     enriched_prompt = enhance_image_prompt(prompt, genre) if genre else prompt
 
-    provider = _PROVIDER
+    # Build ordered list of providers to try
+    selected = (provider_override or _PROVIDER or "dalle3").lower()
 
-    # Auto-select: fall back to stabilityai if no OpenAI key
-    if provider == "dalle3" and not _OPENAI_KEY and _SD_KEY:
-        logger.warning(
-            "[image] OPENAI_API_KEY not set — falling back to Stability AI"
-        )
-        provider = "stabilityai"
+    _ALL = ["dalle3", "gemini", "stabilityai"]
+    # Start with selected, then try others in default order
+    order = [selected] + [p for p in _ALL if p != selected]
 
-    # Last resort: generate a placeholder PNG without any external API
-    if provider == "dalle3" and not _OPENAI_KEY:
-        logger.warning("[image] OPENAI_API_KEY not set — using placeholder image")
+    # Filter to providers that have keys configured
+    def _has_key(p: str) -> bool:
+        if p == "dalle3":      return bool(_OPENAI_KEY)
+        if p == "gemini":      return bool(_GOOGLE_AI_KEY)
+        if p == "stabilityai": return bool(_SD_KEY and _SD_KEY.strip() not in ("", "..."))
+        return False
+
+    available = [p for p in order if _has_key(p)]
+
+    if not available:
+        logger.warning("[image] No image provider keys configured — using placeholder")
         return _generate_placeholder(enriched_prompt, width, height)
 
-    if provider == "stabilityai":
-        if not _SD_KEY or _SD_KEY.strip() in ("", "..."):
-            logger.warning("[image] STABLE_DIFFUSION_API_KEY not set — using placeholder image")
-            return _generate_placeholder(enriched_prompt, width, height)
-        return await _generate_stability(enriched_prompt, width, height)
+    for provider in available:
+        try:
+            if provider == "dalle3":
+                return await _generate_dalle3(enriched_prompt, width, height)
+            elif provider == "gemini":
+                return await _generate_gemini(enriched_prompt, width, height)
+            elif provider == "stabilityai":
+                return await _generate_stability(enriched_prompt, width, height)
+        except Exception as exc:
+            next_p = available[available.index(provider) + 1] if provider != available[-1] else "placeholder"
+            logger.warning(f"[image] {provider} failed ({exc.__class__.__name__}: {str(exc)[:120]}) — trying {next_p}")
 
-    # Default: DALL-E 3
-    try:
-        return await _generate_dalle3(enriched_prompt, width, height)
-    except Exception as exc:
-        logger.warning(f"[image] DALL-E 3 failed ({exc}) — using placeholder image")
-        return _generate_placeholder(enriched_prompt, width, height)
+    logger.warning("[image] All providers exhausted — using placeholder")
+    return _generate_placeholder(enriched_prompt, width, height)

@@ -576,6 +576,8 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
     from app.utils import storage, video_gen as video_gen_util
 
     db = get_db()
+    genre = payload.get("genre", "general")
+    provider_override = payload.get("image_provider", "")
     _update_progress(db, project_id, 5, 5, "스토리보드 로드 중...")
 
     # ── 1. Fetch storyboard scenes from assets ───────────────────────────────
@@ -627,7 +629,8 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
             image_bytes: bytes | None = None
             try:
                 image_bytes = await stable_diffusion.generate_image(
-                    image_prompt, width=1792, height=1024
+                    image_prompt, width=1792, height=1024,
+                    genre=genre, provider_override=provider_override,
                 )
                 image_url = storage.upload_file(
                     project_id=project_id,

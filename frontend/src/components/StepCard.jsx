@@ -44,11 +44,11 @@ const STEP_META = {
     ],
   },
   5: {
-    desc: '스토리보드의 각 씬에 맞는 이미지를 DALL-E 3로 생성하고, 영상 클립도 자동 생성합니다.',
+    desc: '스토리보드의 각 씬에 맞는 이미지를 AI로 생성합니다. 크레딧 소진 시 다음 AI로 자동 전환됩니다.',
     manualInputs: [],
     autoOptions: [
+      { key: 'image_provider', label: '이미지 AI', type: 'select', options: ['auto', 'dalle3', 'gemini', 'stabilityai'], optionLabels: ['자동 (크레딧 소진 시 전환)', 'DALL-E 3 (OpenAI)', 'Gemini Imagen 3 (Google)', 'Stability AI'], default: 'auto' },
       { key: 'genre', label: '이미지 스타일 장르', type: 'select', options: ['general', 'finance', 'mystery', 'history'], optionLabels: ['일반 (범용)', '금융/비즈니스', '미스터리', '역사/다큐'], default: 'general' },
-      { key: 'image_quality', label: '이미지 품질', type: 'select', options: ['standard', 'hd'], optionLabels: ['표준', 'HD (느리지만 고품질)'], default: 'hd' },
     ],
   },
   6: {

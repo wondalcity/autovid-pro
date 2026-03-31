@@ -68,7 +68,7 @@ def main() -> None:
     # If running headless, set --noauth_local_webserver=True and follow the
     # printed URL manually.
     print("Opening browser for Google OAuth2 consent…")
-    creds = flow.run_local_server(port=8080, prompt="consent", open_browser=True)
+    creds = flow.run_local_server(port=9090, prompt="consent", open_browser=True)
 
     token_data = {
         "token": creds.token,
