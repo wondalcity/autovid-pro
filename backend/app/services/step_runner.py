@@ -124,11 +124,14 @@ async def _step1_benchmarking(project_id: str, payload: dict) -> None:
     """
     db = get_db()
 
-    # Normalise: accept both a list and a legacy single-URL field
-    youtube_urls: list[str] = payload.get("youtube_urls") or []
+    # Normalise: accept list, newline-separated string, or single-URL field
+    _raw = payload.get("youtube_urls") or []
+    if isinstance(_raw, str):
+        youtube_urls: list[str] = [u.strip() for u in _raw.splitlines() if u.strip()]
+    else:
+        youtube_urls = [str(u).strip() for u in _raw if str(u).strip()]
     if not youtube_urls and payload.get("youtube_url"):
         youtube_urls = [payload["youtube_url"]]
-    youtube_urls = [u.strip() for u in youtube_urls if u.strip()]
     _update_progress(db, project_id, 1, 5, "URL 준비 중...")
 
     # ── Auto-search: find 5 top videos when no URLs are given ────────────────
