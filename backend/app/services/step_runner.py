@@ -480,6 +480,62 @@ async def _step3_voice_subtitles(project_id: str, payload: dict) -> None:
     logger.info(f"[step3] Caption asset saved → {srt_url}")
 
 
+_PROMPT_ENHANCE_SYSTEM = """You are an expert at writing image generation prompts optimised for Stability AI Core.
+
+Given a scene's Korean description, narration, and a basic English prompt, rewrite the prompt to be vivid and detailed.
+
+Rules:
+- English only
+- 60-90 words
+- Include: shot type (wide/medium/close-up/macro), lighting (golden hour/studio/neon/etc.), mood, composition, art style
+- End with technical qualifiers: "photorealistic, 8K, sharp focus, cinematic" or similar
+- No text, watermarks, logos, or people's faces unless essential
+- Do NOT repeat the basic prompt verbatim — improve it substantially
+
+Return ONLY the enhanced prompt. No explanation, no quotes."""
+
+
+async def _enhance_image_prompts(scenes: list[dict]) -> list[dict]:
+    """Use Claude (via llm.chat_text) to enrich each scene's image_prompt.
+
+    Runs all scenes concurrently (max 4 at a time).
+    Falls back to the original prompt if Claude fails for any scene.
+    """
+    from app.utils.llm import chat_text
+
+    semaphore = asyncio.Semaphore(4)
+
+    async def _enhance_one(scene: dict) -> dict:
+        async with semaphore:
+            basic = scene.get("image_prompt", "").strip()
+            if not basic:
+                return scene
+            user_msg = (
+                f"Scene description (Korean): {scene.get('description', '')}\n"
+                f"Narration (Korean): {scene.get('narration', '')[:200]}\n"
+                f"Basic prompt: {basic}"
+            )
+            try:
+                enhanced = await chat_text(
+                    system=_PROMPT_ENHANCE_SYSTEM,
+                    user=user_msg,
+                    temperature=0.7,
+                    max_tokens=300,
+                )
+                logger.info(
+                    f"[step4] Prompt enhanced for {scene.get('scene_id', '?')}: "
+                    f"{basic[:50]} → {enhanced[:50]}…"
+                )
+                return {**scene, "image_prompt": enhanced, "image_prompt_original": basic}
+            except Exception as exc:
+                logger.warning(
+                    f"[step4] Prompt enhancement failed for {scene.get('scene_id', '?')}: {exc} — using original"
+                )
+                return scene
+
+    return list(await asyncio.gather(*[_enhance_one(s) for s in scenes]))
+
+
 def _scene_id_to_int(scene_id: str | int) -> int:
     """Convert "scene_01" or 1 to an integer for the assets.scene_id column."""
     if isinstance(scene_id, int):
@@ -535,13 +591,18 @@ async def _step4_storyboard(project_id: str, payload: dict) -> None:
         raise RuntimeError("PdAgent returned an empty storyboard")
     logger.info(f"[step4] {len(scenes)} scenes received")
 
+    # ── 2b. Claude → enhance image prompts for each scene ───────────────────
+    _update_progress(db, project_id, 4, 55, f"Claude로 이미지 프롬프트 고도화 중... ({len(scenes)}씬)")
+    _check_cancel(project_id, 4)
+    scenes = await _enhance_image_prompts(scenes)
+
     # ── 3. Delete any previous storyboard rows for this project ─────────────
     db.table("assets").delete().eq("project_id", project_id).eq(
         "asset_type", "storyboard"
     ).execute()
 
     # ── 4. Insert one assets row per scene ───────────────────────────────────
-    _update_progress(db, project_id, 4, 75, f"{len(scenes)}개 씬 저장 중...")
+    _update_progress(db, project_id, 4, 80, f"{len(scenes)}개 씬 저장 중...")
     for scene in scenes:
         scene_num = _scene_id_to_int(scene.get("scene_id", 0))
         db.table("assets").insert(
@@ -578,6 +639,7 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
     db = get_db()
     genre = payload.get("genre", "general")
     provider_override = payload.get("image_provider", "")
+    video_provider = payload.get("video_provider", "none")
     _update_progress(db, project_id, 5, 5, "스토리보드 로드 중...")
 
     # ── 1. Fetch storyboard scenes from assets ───────────────────────────────
@@ -647,6 +709,7 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
                         "metadata": {
                             "scene_id": scene_id_str,
                             "image_prompt": image_prompt,
+                            "image_provider": provider_override or "auto",
                         },
                     }
                 ).execute()
@@ -668,6 +731,7 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
                     image_bytes=image_bytes,
                     video_prompt=video_prompt,
                     duration_seconds=5,
+                    provider_override=video_provider,
                 )
                 video_url = storage.upload_file(
                     project_id=project_id,
@@ -684,6 +748,7 @@ async def _step5_images_video(project_id: str, payload: dict) -> None:
                         "metadata": {
                             "scene_id": scene_id_str,
                             "video_prompt": video_prompt,
+                            "video_provider": video_provider,
                         },
                     }
                 ).execute()
@@ -722,17 +787,21 @@ async def _step6_editing(project_id: str, payload: dict) -> None:
       1. Read voice + caption URLs from assets
       2. Read video + image asset rows (for per-scene media)
       3. Read storyboard rows (for per-scene duration/timestamps)
-      4. build_final_video() → MP4 bytes
-      5. Upload final MP4 to Supabase Storage → save as assets (type='final_video')
-      6. Strategist.generate_youtube_meta() → title / description / tags
-      7. Save to youtube_meta table
+      4. Download background music from Pixabay (optional, CC0)
+      5. build_final_video() → MP4 bytes (TTS + bg music + subtitles)
+      6. Upload final MP4 to Supabase Storage → save as assets (type='final_video')
+      7. Strategist.generate_youtube_meta() → title / description / tags
+      8. Save to youtube_meta table
     """
     from app.utils import storage as storage_util
     from app.utils.ffmpeg_editor import build_final_video
+    from app.utils.bg_music import download_bg_music
 
     db = get_db()
     _update_progress(db, project_id, 6, 10, "에셋 로드 중...")
     burn_subtitles: bool = bool(payload.get("burn_subtitles", False))
+    bg_music_genre: str = payload.get("bg_music_genre", "none")
+    bg_music_volume: float = float(payload.get("bg_music_volume", 0.12))
 
     # ── 1. Fetch voice & caption asset URLs ──────────────────────────────────
     assets_result = (
@@ -793,7 +862,18 @@ async def _step6_editing(project_id: str, payload: dict) -> None:
         f"burn_subtitles={burn_subtitles} (project {project_id})"
     )
 
-    # ── 4. Build final video ──────────────────────────────────────────────────
+    # ── 4. Download background music (optional) ──────────────────────────────
+    bg_music_bytes: bytes | None = None
+    if bg_music_genre and bg_music_genre != "none":
+        _update_progress(db, project_id, 6, 25, f"배경음악 다운로드 중... ({bg_music_genre})")
+        try:
+            bg_music_bytes = await download_bg_music(genre=bg_music_genre)
+            if bg_music_bytes:
+                logger.info(f"[step6] Background music ready ({len(bg_music_bytes) // 1024} KB)")
+        except Exception as exc:
+            logger.warning(f"[step6] Background music download failed: {exc} — continuing without music")
+
+    # ── 5. Build final video ──────────────────────────────────────────────────
     _update_progress(db, project_id, 6, 30, "FFmpeg 편집 중...")
     _check_cancel(project_id, 6)
     final_bytes: bytes = await build_final_video(
@@ -803,6 +883,8 @@ async def _step6_editing(project_id: str, payload: dict) -> None:
         image_rows=image_rows,
         storyboard_rows=storyboard_rows,
         burn_subtitles=burn_subtitles,
+        bg_music_bytes=bg_music_bytes,
+        bg_music_volume=bg_music_volume,
     )
     logger.info(
         f"[step6] ffmpeg done — {len(final_bytes) / 1_048_576:.1f} MB "
@@ -876,19 +958,28 @@ async def _step6_editing(project_id: str, payload: dict) -> None:
 async def _step7_thumbnail(project_id: str, payload: dict) -> None:
     """Thumbnail generation pipeline.
 
-    Flow:
-      1. Fetch youtube_meta (title) + benchmarking analysis_result
-      2. Strategist.generate_thumbnail_prompt() → image prompt + overlay_text
-      3. Stable Diffusion / DALL-E → 1280×720 image bytes
-      4. Upload to Supabase Storage → assets row (asset_type='thumbnail')
-      5. Update youtube_meta.thumbnail_url
+    Mode "scene" (default, fast):
+      1. Fetch youtube_meta title
+      2. Fetch first scene image from Step 5 assets
+      3. Pillow composite: scene image + title text overlay → 1280×720 PNG
+      4. Upload + save assets row
+
+    Mode "ai" (optional, requires image API credits):
+      1-2. Same as above
+      3. Strategist → image prompt
+      4. AI image generation (DALL-E / Gemini / Stability AI)
+      5-6. Upload + save assets row
     """
     from app.utils import storage as storage_util
+    from app.utils.thumbnail_builder import build_thumbnail
 
     db = get_db()
+    thumbnail_mode: str = payload.get("thumbnail_mode", "scene")
+    thumbnail_style: str = payload.get("thumbnail_style", "bold")
+
     _update_progress(db, project_id, 7, 15, "데이터 로드 중...")
 
-    # ── 1. Fetch YouTube title from youtube_meta ──────────────────────────────
+    # ── 1. Fetch YouTube title ────────────────────────────────────────────────
     meta_result = (
         db.table("youtube_meta")
         .select("title")
@@ -900,57 +991,78 @@ async def _step7_thumbnail(project_id: str, payload: dict) -> None:
         meta_result.data[0].get("title", "") if meta_result.data else ""
     )
     if not youtube_title:
-        logger.warning(
-            f"[step7] No youtube_meta title found for project {project_id} — "
-            "proceeding with empty title"
-        )
+        logger.warning(f"[step7] No youtube_meta title — using empty title")
 
-    # ── 2. Fetch benchmarking analysis_result ─────────────────────────────────
-    bench_result = (
-        db.table("benchmarking")
-        .select("analysis_result")
+    # ── 2. Fetch first scene image from Step 5 ────────────────────────────────
+    scene_result = (
+        db.table("assets")
+        .select("file_path")
         .eq("project_id", project_id)
-        .order("created_at", desc=True)
+        .eq("asset_type", "image")
+        .order("scene_id")
         .limit(1)
         .execute()
     )
-    analysis_raw = bench_result.data[0].get("analysis_result") if bench_result.data else {}
-    analysis_result: dict = (
-        json.loads(analysis_raw) if isinstance(analysis_raw, str) else (analysis_raw or {})
+    scene_image_url: str | None = (
+        scene_result.data[0]["file_path"] if scene_result.data else None
     )
 
-    # ── 3. Strategist → thumbnail prompt ─────────────────────────────────────
-    logger.info(f"[step7] Generating thumbnail prompt for project {project_id}")
-    _update_progress(db, project_id, 7, 30, "썸네일 프롬프트 생성 중...")
-    _check_cancel(project_id, 7)
-    agent = StrategistAgent()
-    thumb_spec: dict = await agent.generate_thumbnail_prompt(
-        youtube_title=youtube_title,
-        analysis_result=analysis_result,
-    )
-    image_prompt: str = thumb_spec.get("prompt", "")
-    overlay_text: str = thumb_spec.get("overlay_text", "")
-    style_notes: str = thumb_spec.get("style_notes", "")
+    image_bytes: bytes | None = None
+    image_prompt: str = ""
+    overlay_text: str = youtube_title
 
-    logger.info(
-        f"[step7] Thumbnail prompt: {image_prompt[:120]!r} "
-        f"overlay='{overlay_text}' (project {project_id})"
-    )
+    # ── 3a. Scene-based thumbnail (default) ───────────────────────────────────
+    if thumbnail_mode != "ai" and scene_image_url:
+        _update_progress(db, project_id, 7, 40, "씬 이미지로 썸네일 합성 중...")
+        _check_cancel(project_id, 7)
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                resp = await client.get(scene_image_url)
+                resp.raise_for_status()
+                scene_bytes = resp.content
+            image_bytes = build_thumbnail(scene_bytes, youtube_title, style=thumbnail_style)
+            image_prompt = f"[Scene-based] {scene_image_url}"
+            logger.info(
+                f"[step7] Scene thumbnail built — {len(image_bytes) // 1024} KB"
+            )
+        except Exception as exc:
+            logger.warning(f"[step7] Scene thumbnail failed ({exc}) — falling back to AI")
 
-    # ── 4. Stable Diffusion / DALL-E → image bytes ───────────────────────────
-    # YouTube thumbnail is 1280×720 (16:9).
-    # DALL-E 3 only supports 1792×1024 / 1024×1024 / 1024×1792 — use 1792×1024
-    # and let the frontend crop/display at 16:9.  Stability AI returns exact sizes.
-    _update_progress(db, project_id, 7, 55, "AI 이미지 생성 중...")
-    image_bytes: bytes = await stable_diffusion.generate_image(
-        image_prompt, width=1280, height=720
-    )
-    logger.info(
-        f"[step7] Thumbnail image generated — {len(image_bytes) / 1024:.0f} KB "
-        f"(project {project_id})"
-    )
+    # ── 3b. AI thumbnail (mode="ai" or scene fallback) ────────────────────────
+    if image_bytes is None:
+        _update_progress(db, project_id, 7, 40, "AI 썸네일 프롬프트 생성 중...")
+        bench_result = (
+            db.table("benchmarking")
+            .select("analysis_result")
+            .eq("project_id", project_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        analysis_raw = bench_result.data[0].get("analysis_result") if bench_result.data else {}
+        analysis_result: dict = (
+            json.loads(analysis_raw) if isinstance(analysis_raw, str) else (analysis_raw or {})
+        )
 
-    # ── 5. Upload to Supabase Storage ─────────────────────────────────────────
+        agent = StrategistAgent()
+        thumb_spec: dict = await agent.generate_thumbnail_prompt(
+            youtube_title=youtube_title,
+            analysis_result=analysis_result,
+        )
+        image_prompt = thumb_spec.get("prompt", "")
+        overlay_text = thumb_spec.get("overlay_text", youtube_title)
+
+        _update_progress(db, project_id, 7, 60, "AI 이미지 생성 중...")
+        _check_cancel(project_id, 7)
+        image_bytes = await stable_diffusion.generate_image(
+            image_prompt, width=1280, height=720
+        )
+        logger.info(
+            f"[step7] AI thumbnail generated — {len(image_bytes) // 1024} KB"
+        )
+
+    # ── 4. Upload to Supabase Storage ─────────────────────────────────────────
     _update_progress(db, project_id, 7, 85, "썸네일 업로드 중...")
     thumbnail_url: str = storage_util.upload_file(
         project_id=project_id,
@@ -959,12 +1071,10 @@ async def _step7_thumbnail(project_id: str, payload: dict) -> None:
         content_type="image/png",
     )
 
-    # ── 6. Save assets row ────────────────────────────────────────────────────
-    # Remove any previous thumbnail for this project first
+    # ── 5. Save assets row ────────────────────────────────────────────────────
     db.table("assets").delete().eq("project_id", project_id).eq(
         "asset_type", "thumbnail"
     ).execute()
-
     db.table("assets").insert(
         {
             "project_id": project_id,
@@ -973,7 +1083,8 @@ async def _step7_thumbnail(project_id: str, payload: dict) -> None:
             "metadata": {
                 "image_prompt": image_prompt,
                 "overlay_text": overlay_text,
-                "style_notes": style_notes,
+                "thumbnail_mode": thumbnail_mode,
+                "thumbnail_style": thumbnail_style,
                 "youtube_title": youtube_title,
                 "size_bytes": len(image_bytes),
             },

@@ -28,4 +28,8 @@ export const approveScript = (projectId, finalScript) =>
 export const cancelStep = (projectId, stepNum) =>
   api.post(`/projects/${projectId}/steps/${stepNum}/cancel`)
 
+export const getSettings = () => api.get('/settings')
+
+export const saveSettings = (updates) => api.post('/settings', updates)
+
 export default api

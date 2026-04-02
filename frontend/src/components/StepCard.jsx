@@ -44,28 +44,31 @@ const STEP_META = {
     ],
   },
   5: {
-    desc: '스토리보드의 각 씬에 맞는 이미지를 AI로 생성합니다. 크레딧 소진 시 다음 AI로 자동 전환됩니다.',
+    desc: '스토리보드의 각 씬에 맞는 이미지를 AI로 생성합니다. 영상 AI도 선택하면 이미지를 영상 클립으로 변환합니다.',
     manualInputs: [],
     autoOptions: [
-      { key: 'image_provider', label: '이미지 AI', type: 'select', options: ['auto', 'dalle3', 'gemini', 'stabilityai'], optionLabels: ['자동 (크레딧 소진 시 전환)', 'DALL-E 3 (OpenAI)', 'Gemini Imagen 3 (Google)', 'Stability AI'], default: 'auto' },
-      { key: 'genre', label: '이미지 스타일 장르', type: 'select', options: ['general', 'finance', 'mystery', 'history'], optionLabels: ['일반 (범용)', '금융/비즈니스', '미스터리', '역사/다큐'], default: 'general' },
+      { key: 'image_provider', label: '이미지 AI', type: 'select', options: ['auto', 'dalle3', 'gemini', 'stabilityai'], optionLabels: ['자동 (크레딧 소진 시 전환)', 'DALL-E 3 (OpenAI)', 'Gemini Imagen (Google)', 'Stability AI'], default: 'auto' },
+      { key: 'genre', label: '이미지 스타일', type: 'select', options: ['general', 'finance', 'mystery', 'history'], optionLabels: ['일반 (범용)', '금융/비즈니스', '미스터리', '역사/다큐'], default: 'general' },
+      { key: 'video_provider', label: '영상 AI', type: 'select', options: ['none', 'runway', 'svd'], optionLabels: ['사용 안 함 (이미지만)', 'Runway ML Gen-3', '로컬 SVD'], default: 'none' },
     ],
   },
   6: {
-    desc: 'FFmpeg으로 씬 클립을 이어붙이고 TTS 음성과 자막을 합쳐 최종 MP4를 만듭니다.',
+    desc: 'FFmpeg으로 씬 클립을 이어붙이고 TTS 음성·배경음악·자막을 합쳐 최종 MP4를 만듭니다.',
     manualInputs: [
       { key: 'burn_subtitles', label: '자막 하드코딩 (Burn-in)', type: 'toggle', hint: '항상 자막이 보이게 영상에 직접 삽입합니다' },
     ],
     autoOptions: [
+      { key: 'bg_music_genre', label: '배경음악 장르', type: 'select', options: ['none', 'general', 'finance', 'mystery', 'history'], optionLabels: ['사용 안 함', '일반 (Ambient)', '금융/비즈니스 (Corporate)', '미스터리 (Dark Ambient)', '역사/다큐 (Orchestral)'], default: 'none' },
+      { key: 'bg_music_volume', label: '배경음악 볼륨', type: 'select', options: ['0.08', '0.12', '0.18', '0.25'], optionLabels: ['낮음 (8%)', '보통 (12%) 권장', '높음 (18%)', '매우 높음 (25%)'], default: '0.12' },
       { key: 'subtitle_style', label: '자막 스타일', type: 'select', options: ['white', 'yellow', 'auto'], optionLabels: ['흰색', '노란색', '자동'], default: 'auto' },
     ],
   },
   7: {
-    desc: 'Strategist AI가 YouTube 제목과 경쟁 분석 데이터를 기반으로 썸네일을 생성합니다.',
+    desc: '씬 이미지에 제목을 합성해 썸네일을 즉시 생성합니다. AI 이미지 생성도 선택 가능합니다.',
     manualInputs: [],
     autoOptions: [
+      { key: 'thumbnail_mode', label: '생성 방식', type: 'select', options: ['scene', 'ai'], optionLabels: ['씬 이미지 합성 (빠름, 무료)', 'AI 이미지 생성 (크레딧 필요)'], default: 'scene' },
       { key: 'thumbnail_style', label: '썸네일 스타일', type: 'select', options: ['bold', 'minimal', 'gradient'], optionLabels: ['임팩트 (굵은 텍스트)', '미니멀/클린', '그라디언트'], default: 'bold' },
-      { key: 'include_title_text', label: '제목 텍스트 포함', type: 'toggle', defaultChecked: true, hint: '썸네일에 제목 텍스트를 오버레이합니다' },
     ],
   },
   8: {
@@ -80,27 +83,27 @@ const STEP_META = {
 
 // ── Status config ──────────────────────────────────────────────────────────────
 const STATUS = {
-  pending:         { label: '대기 중',   color: '#8A9BBF', bg: 'rgba(74,84,112,0.15)' },
-  running:         { label: '실행 중',   color: '#F59E0B', bg: 'rgba(245,158,11,0.15)' },
-  done:            { label: '완료',      color: '#10B981', bg: 'rgba(16,185,129,0.15)' },
-  error:           { label: '오류',      color: '#EF4444', bg: 'rgba(239,68,68,0.15)' },
-  awaiting_review: { label: '검토 필요', color: '#A78BFA', bg: 'rgba(167,139,250,0.15)' },
+  pending:         { label: '대기 중',   color: 'var(--text-3)', bg: 'var(--surface-2)' },
+  running:         { label: '실행 중',   color: 'var(--amber)', bg: 'var(--amber-dim)' },
+  done:            { label: '완료',      color: 'var(--green)', bg: 'var(--green-dim)' },
+  error:           { label: '오류',      color: 'var(--red)', bg: 'var(--red-dim)' },
+  awaiting_review: { label: '검토 필요', color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
 }
 
 // ── Input styles ───────────────────────────────────────────────────────────────
 const inputStyle = {
-  width: '100%', background: '#172336', border: '1px solid #253550',
-  borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#E8EEFF',
+  width: '100%', background: 'var(--surface-2)', border: '1px solid var(--border)',
+  borderRadius: 12, padding: '11px 14px', fontSize: 13, color: 'var(--text)',
   outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
   fontFamily: 'inherit',
 }
-const inputFocusStyle = { ...inputStyle, border: '1px solid #5B78F6' }
+const inputFocusStyle = { ...inputStyle, border: '1px solid var(--accent)' }
 
 // ── Helper components ─────────────────────────────────────────────────────────
 function Label({ children }) {
   return (
     <p style={{
-      fontSize: 11, fontWeight: 600, color: '#8A9BBF',
+      fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
       textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 10, margin: '0 0 10px',
     }}>
       {children}
@@ -111,7 +114,7 @@ function Label({ children }) {
 function Card({ children, style: extraStyle = {} }) {
   return (
     <div style={{
-      background: '#111A2E', border: '1px solid #253550',
+      background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 14, padding: '16px 18px', ...extraStyle,
     }}>
       {children}
@@ -119,12 +122,21 @@ function Card({ children, style: extraStyle = {} }) {
   )
 }
 
-function Tag({ children, color = '#5B78F6' }) {
+const TAG_BG = {
+  'var(--accent)': 'var(--accent-dim)',
+  'var(--green)':  'var(--green-dim)',
+  'var(--amber)':  'var(--amber-dim)',
+  'var(--red)':    'var(--red-dim)',
+  'var(--text-2)': 'var(--surface-2)',
+  'var(--text-3)': 'var(--surface-3)',
+}
+function Tag({ children, color = 'var(--accent)' }) {
+  const bg = TAG_BG[color] || (color.startsWith('#') ? `${color}18` : 'var(--surface-2)')
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
       fontSize: 11, fontWeight: 500, padding: '3px 8px',
-      borderRadius: 6, background: `${color}18`, color,
+      borderRadius: 6, background: bg, color,
     }}>
       {children}
     </span>
@@ -166,7 +178,7 @@ function StepOutput({ step, data }) {
                 {/* Vertical line */}
                 <div style={{
                   position: 'absolute', left: 16, top: 0, bottom: 0,
-                  width: 2, background: 'linear-gradient(to bottom, #5B78F6, #1a2a4a)',
+                  width: 2, background: 'linear-gradient(to bottom, var(--accent), var(--border))',
                   borderRadius: 2,
                 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -181,7 +193,7 @@ function StepOutput({ step, data }) {
                         <div style={{
                           position: 'absolute', left: 9, top: 4,
                           width: 16, height: 16, borderRadius: '50%',
-                          background: '#5B78F6', border: '3px solid #0D1525',
+                          background: 'var(--accent)', border: '3px solid var(--surface)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 8, fontWeight: 700, color: 'white', flexShrink: 0,
                         }}>{i + 1}</div>
@@ -190,7 +202,7 @@ function StepOutput({ step, data }) {
                         <div style={{ flex: 1, minWidth: 0 }}>
                           {/* Time badge */}
                           {v.created_at && (
-                            <div style={{ fontSize: 11, color: '#5B78F6', marginBottom: 6, fontWeight: 500 }}>
+                            <div style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 6, fontWeight: 500 }}>
                               🕐 {formatTime(v.created_at)} 분석
                             </div>
                           )}
@@ -201,7 +213,7 @@ function StepOutput({ step, data }) {
                                 <img
                                   src={thumb}
                                   alt={v.title}
-                                  style={{ width: 100, height: 56, objectFit: 'cover', borderRadius: 6, display: 'block', border: '1px solid #253550' }}
+                                  style={{ width: 100, height: 56, objectFit: 'cover', borderRadius: 6, display: 'block', border: '1px solid var(--border)' }}
                                   onError={e => { e.target.style.display = 'none' }}
                                 />
                               </a>
@@ -209,7 +221,7 @@ function StepOutput({ step, data }) {
                             <div style={{ flex: 1, minWidth: 0 }}>
                               {/* Title + open button */}
                               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
-                                <span style={{ fontSize: 13, fontWeight: 600, color: '#E8EEFF', lineHeight: 1.4, flex: 1 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, flex: 1 }}>
                                   {v.title || v.url}
                                 </span>
                                 <a
@@ -217,7 +229,7 @@ function StepOutput({ step, data }) {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="YouTube에서 열기"
-                                  style={{ flexShrink: 0, color: '#5B78F6', display: 'flex', alignItems: 'center' }}
+                                  style={{ flexShrink: 0, color: 'var(--accent)', display: 'flex', alignItems: 'center' }}
                                 >
                                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
@@ -226,7 +238,7 @@ function StepOutput({ step, data }) {
                               </div>
                               {/* Transcript excerpt */}
                               {excerpt && (
-                                <p style={{ fontSize: 11, color: '#7A8FAD', lineHeight: 1.6, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
+                                <p style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.6, margin: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>
                                   {excerpt}
                                 </p>
                               )}
@@ -245,7 +257,7 @@ function StepOutput({ step, data }) {
           {ar.competitive_summary && (
             <Card>
               <Label>🎯 전략 요약</Label>
-              <p style={{ fontSize: 13, lineHeight: 1.7, color: '#C8D4F0', margin: 0 }}>{ar.competitive_summary}</p>
+              <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-2)', margin: 0 }}>{ar.competitive_summary}</p>
             </Card>
           )}
 
@@ -256,8 +268,8 @@ function StepOutput({ step, data }) {
               <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {keyFacts.map((f, i) => (
                   <li key={i} style={{ display: 'flex', gap: 10, fontSize: 13, alignItems: 'flex-start' }}>
-                    <span style={{ color: '#5B78F6', fontWeight: 700, flexShrink: 0, lineHeight: 1.6 }}>0{i + 1}</span>
-                    <span style={{ color: '#A8B6CB', lineHeight: 1.6 }}>{f}</span>
+                    <span style={{ color: 'var(--accent)', fontWeight: 700, flexShrink: 0, lineHeight: 1.6 }}>0{i + 1}</span>
+                    <span style={{ color: 'var(--text-2)', lineHeight: 1.6 }}>{f}</span>
                   </li>
                 ))}
               </ul>
@@ -274,7 +286,7 @@ function StepOutput({ step, data }) {
                 </div>
                 {ar.title_thumbnail_patterns.hook_words?.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {ar.title_thumbnail_patterns.hook_words.map((w, i) => <Tag key={i} color="#5B78F6">{w}</Tag>)}
+                    {ar.title_thumbnail_patterns.hook_words.map((w, i) => <Tag key={i} color="var(--accent)">{w}</Tag>)}
                   </div>
                 )}
               </Card>
@@ -285,8 +297,8 @@ function StepOutput({ step, data }) {
                 <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {ar.suggested_angles.map((a, i) => (
                     <li key={i} style={{ display: 'flex', gap: 8, fontSize: 13 }}>
-                      <span style={{ color: '#F59E0B', fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
-                      <span style={{ color: '#A8B6CB', lineHeight: 1.5 }}>{a}</span>
+                      <span style={{ color: 'var(--amber)', fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>
+                      <span style={{ color: 'var(--text-2)', lineHeight: 1.5 }}>{a}</span>
                     </li>
                   ))}
                 </ol>
@@ -299,7 +311,7 @@ function StepOutput({ step, data }) {
             {ar.target_audience && (
               <Card>
                 <Label>👥 타깃 오디언스</Label>
-                <p style={{ fontSize: 13, lineHeight: 1.6, color: '#A8B6CB', margin: 0 }}>{ar.target_audience}</p>
+                <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-2)', margin: 0 }}>{ar.target_audience}</p>
               </Card>
             )}
             {ar.story_structure && (
@@ -308,20 +320,20 @@ function StepOutput({ step, data }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>
                   {ar.story_structure.intro_style && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: '#F59E0B', fontWeight: 600, flexShrink: 0 }}>인트로</span>
-                      <span style={{ color: '#A8B6CB' }}>{ar.story_structure.intro_style}</span>
+                      <span style={{ color: 'var(--amber)', fontWeight: 600, flexShrink: 0 }}>인트로</span>
+                      <span style={{ color: 'var(--text-2)' }}>{ar.story_structure.intro_style}</span>
                     </div>
                   )}
                   {ar.story_structure.main_body_format && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: '#10B981', fontWeight: 600, flexShrink: 0 }}>본론</span>
-                      <span style={{ color: '#A8B6CB' }}>{ar.story_structure.main_body_format}</span>
+                      <span style={{ color: 'var(--green)', fontWeight: 600, flexShrink: 0 }}>본론</span>
+                      <span style={{ color: 'var(--text-2)' }}>{ar.story_structure.main_body_format}</span>
                     </div>
                   )}
                   {ar.story_structure.conclusion_style && (
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: '#5B78F6', fontWeight: 600, flexShrink: 0 }}>결론</span>
-                      <span style={{ color: '#A8B6CB' }}>{ar.story_structure.conclusion_style}</span>
+                      <span style={{ color: 'var(--accent)', fontWeight: 600, flexShrink: 0 }}>결론</span>
+                      <span style={{ color: 'var(--text-2)' }}>{ar.story_structure.conclusion_style}</span>
                     </div>
                   )}
                 </div>
@@ -346,8 +358,8 @@ function StepOutput({ step, data }) {
               <audio controls src={voice.file_path} style={{ width: '100%', borderRadius: 8, marginTop: 4, colorScheme: 'dark' }} />
               {voice.metadata && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <Tag color="#10B981">{voice.metadata.segments}개 씬</Tag>
-                  {voice.metadata.size_bytes && <Tag color="#8A9BBF">{(voice.metadata.size_bytes / 1024).toFixed(0)} KB</Tag>}
+                  <Tag color="var(--green)">{voice.metadata.segments}개 씬</Tag>
+                  {voice.metadata.size_bytes && <Tag color="var(--text-3)">{(voice.metadata.size_bytes / 1024).toFixed(0)} KB</Tag>}
                 </div>
               )}
             </Card>
@@ -357,13 +369,13 @@ function StepOutput({ step, data }) {
               <Label>📄 자막 파일 (SRT)</Label>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <Tag color="#14B8A6">SRT</Tag>
-                  {caption.metadata?.entries > 0 && <Tag color="#8A9BBF">{caption.metadata.entries}개 항목</Tag>}
+                  <Tag color="var(--green)">SRT</Tag>
+                  {caption.metadata?.entries > 0 && <Tag color="var(--text-3)">{caption.metadata.entries}개 항목</Tag>}
                 </div>
                 <a
                   href={caption.file_path}
                   download="captions.srt"
-                  style={{ fontSize: 12, fontWeight: 500, color: '#5B78F6', textDecoration: 'none' }}
+                  style={{ fontSize: 12, fontWeight: 500, color: 'var(--accent)', textDecoration: 'none' }}
                 >
                   ↓ 다운로드
                 </a>
@@ -385,30 +397,30 @@ function StepOutput({ step, data }) {
             return (
               <Card key={s.scene_id}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'rgba(91,120,246,0.15)', color: '#5B78F6' }}>씬 {s.scene_id}</span>
-                  {m.timestamp && <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#8A9BBF' }}>{m.timestamp}</span>}
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#C8D4F0' }}>{m.description}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'var(--accent-dim)', color: 'var(--accent)' }}>씬 {s.scene_id}</span>
+                  {m.timestamp && <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-3)' }}>{m.timestamp}</span>}
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{m.description}</span>
                 </div>
                 {m.narration && (
                   <p style={{
                     fontSize: 12, fontStyle: 'italic', lineHeight: 1.6,
                     marginBottom: 10, paddingLeft: 12,
-                    borderLeft: '2px solid #5B78F6', color: '#A8B6CB',
+                    borderLeft: '2px solid var(--accent)', color: 'var(--text-2)',
                   }}>
                     "{m.narration}"
                   </p>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
                   {m.image_prompt && (
-                    <div style={{ borderRadius: 8, padding: '8px 12px', background: 'rgba(139,92,246,0.08)' }}>
+                    <div style={{ borderRadius: 8, padding: '8px 12px', background: 'rgba(139,92,246,0.07)' }}>
                       <p style={{ fontSize: 11, fontWeight: 600, color: '#8B5CF6', marginBottom: 4, margin: '0 0 4px' }}>이미지 프롬프트</p>
-                      <p style={{ fontSize: 11, color: '#A8B6CB', margin: 0 }}>{m.image_prompt}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>{m.image_prompt}</p>
                     </div>
                   )}
                   {m.video_prompt && (
                     <div style={{ borderRadius: 8, padding: '8px 12px', background: 'rgba(20,184,166,0.08)' }}>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: '#14B8A6', marginBottom: 4, margin: '0 0 4px' }}>영상 프롬프트</p>
-                      <p style={{ fontSize: 11, color: '#A8B6CB', margin: 0 }}>{m.video_prompt}</p>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--green)', marginBottom: 4, margin: '0 0 4px' }}>영상 프롬프트</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>{m.video_prompt}</p>
                     </div>
                   )}
                 </div>
@@ -422,35 +434,44 @@ function StepOutput({ step, data }) {
     case 5: {
       const scenes = data.scenes || []
       if (!scenes.length) return null
+      const IMAGE_PROVIDER_LABELS = { auto: '자동', dalle3: 'DALL-E 3', gemini: 'Gemini', stabilityai: 'Stability AI' }
+      const VIDEO_PROVIDER_LABELS = { runway: 'Runway ML', svd: 'SVD' }
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Label>🖼️ 씬 이미지 + 영상 ({scenes.length}씬)</Label>
-          {scenes.map((s) => (
-            <Card key={s.scene_id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Tag color="#5B78F6">씬 {s.scene_id}</Tag>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                {s.image?.file_path && (
-                  <div>
-                    <p style={{ fontSize: 11, color: '#8A9BBF', marginBottom: 6, margin: '0 0 6px' }}>이미지</p>
-                    <img src={s.image.file_path} alt={`scene ${s.scene_id}`} style={{ width: '100%', borderRadius: 8, objectFit: 'cover', aspectRatio: '16/9', display: 'block' }} />
-                    {s.image.metadata?.image_prompt && (
-                      <p style={{ fontSize: 11, marginTop: 6, fontStyle: 'italic', color: '#8A9BBF', margin: '6px 0 0' }}>
-                        {s.image.metadata.image_prompt.slice(0, 80)}…
-                      </p>
-                    )}
-                  </div>
-                )}
-                {s.video?.file_path && (
-                  <div>
-                    <p style={{ fontSize: 11, color: '#8A9BBF', marginBottom: 6, margin: '0 0 6px' }}>영상 클립</p>
-                    <video controls src={s.video.file_path} style={{ width: '100%', borderRadius: 8, aspectRatio: '16/9', display: 'block' }} />
-                  </div>
-                )}
-              </div>
-            </Card>
-          ))}
+          {scenes.map((s) => {
+            const imgProvider = s.image?.metadata?.image_provider
+            const vidProvider = s.video?.metadata?.video_provider
+            return (
+              <Card key={s.scene_id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <Tag color="var(--accent)">씬 {s.scene_id}</Tag>
+                  {imgProvider && <Tag color="var(--text-3)">{IMAGE_PROVIDER_LABELS[imgProvider] || imgProvider}</Tag>}
+                  {vidProvider && vidProvider !== 'none' && <Tag color="var(--green)">🎬 {VIDEO_PROVIDER_LABELS[vidProvider] || vidProvider}</Tag>}
+                  {!s.video?.file_path && <Tag color="var(--text-3)">이미지 전용</Tag>}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: s.video?.file_path ? 'repeat(auto-fit, minmax(200px, 1fr))' : '1fr', gap: 12 }}>
+                  {s.image?.file_path && (
+                    <div>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6, margin: '0 0 6px' }}>이미지</p>
+                      <img src={s.image.file_path} alt={`scene ${s.scene_id}`} style={{ width: '100%', borderRadius: 8, objectFit: 'cover', aspectRatio: '16/9', display: 'block' }} />
+                      {s.image.metadata?.image_prompt && (
+                        <p style={{ fontSize: 11, marginTop: 6, fontStyle: 'italic', color: 'var(--text-3)', margin: '6px 0 0' }}>
+                          {s.image.metadata.image_prompt.slice(0, 80)}…
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {s.video?.file_path && (
+                    <div>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 6, margin: '0 0 6px' }}>영상 클립</p>
+                      <video controls src={s.video.file_path} style={{ width: '100%', borderRadius: 8, aspectRatio: '16/9', display: 'block' }} />
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )
+          })}
         </div>
       )
     }
@@ -466,21 +487,21 @@ function StepOutput({ step, data }) {
               <Label>🎬 최종 영상</Label>
               <video controls src={fv.file_path} style={{ width: '100%', borderRadius: 8, marginTop: 4, display: 'block' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-                {fv.metadata?.size_bytes && <Tag color="#8A9BBF">{(fv.metadata.size_bytes / 1048576).toFixed(1)} MB</Tag>}
-                {fv.metadata?.scenes && <Tag color="#8A9BBF">{fv.metadata.scenes}씬</Tag>}
-                {fv.metadata?.burn_subtitles && <Tag color="#F59E0B">자막 하드코딩</Tag>}
-                <a href={fv.file_path} download="final_video.mp4" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: '#5B78F6', textDecoration: 'none' }}>↓ MP4 다운로드</a>
+                {fv.metadata?.size_bytes && <Tag color="var(--text-3)">{(fv.metadata.size_bytes / 1048576).toFixed(1)} MB</Tag>}
+                {fv.metadata?.scenes && <Tag color="var(--text-3)">{fv.metadata.scenes}씬</Tag>}
+                {fv.metadata?.burn_subtitles && <Tag color="var(--amber)">자막 하드코딩</Tag>}
+                <a href={fv.file_path} download="final_video.mp4" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: 'var(--accent)', textDecoration: 'none' }}>↓ MP4 다운로드</a>
               </div>
             </Card>
           )}
           {ym.title && (
             <Card>
               <Label>📋 AI 생성 YouTube 메타데이터 (Step 8에서 편집 가능)</Label>
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#E8EEFF', margin: '0 0 8px' }}>{ym.title}</p>
-              {ym.description && <p style={{ fontSize: 13, lineHeight: 1.6, color: '#A8B6CB', margin: '0 0 12px' }}>{ym.description}</p>}
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 8px' }}>{ym.title}</p>
+              {ym.description && <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-2)', margin: '0 0 12px' }}>{ym.description}</p>}
               {ym.tags?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ym.tags.map((t, i) => <Tag key={i} color="#5B78F6">#{t}</Tag>)}
+                  {ym.tags.map((t, i) => <Tag key={i} color="var(--accent)">#{t}</Tag>)}
                 </div>
               )}
             </Card>
@@ -510,20 +531,20 @@ function StepOutput({ step, data }) {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-              {tm.size_bytes && <Tag color="#8A9BBF">{(tm.size_bytes / 1024).toFixed(0)} KB</Tag>}
-              <a href={data.file_path} download="thumbnail.png" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: '#5B78F6', textDecoration: 'none' }}>↓ PNG 다운로드</a>
+              {tm.size_bytes && <Tag color="var(--text-3)">{(tm.size_bytes / 1024).toFixed(0)} KB</Tag>}
+              <a href={data.file_path} download="thumbnail.png" style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: 'var(--accent)', textDecoration: 'none' }}>↓ PNG 다운로드</a>
             </div>
           </Card>
           {tm.style_notes && (
             <Card>
               <Label>디자인 전략</Label>
-              <p style={{ fontSize: 13, lineHeight: 1.6, color: '#A8B6CB', margin: 0 }}>{tm.style_notes}</p>
+              <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-2)', margin: 0 }}>{tm.style_notes}</p>
             </Card>
           )}
           {tm.image_prompt && (
             <Card>
               <Label>이미지 프롬프트</Label>
-              <p style={{ fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, color: '#8A9BBF', margin: 0 }}>{tm.image_prompt}</p>
+              <p style={{ fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, color: 'var(--text-3)', margin: 0 }}>{tm.image_prompt}</p>
             </Card>
           )}
         </div>
@@ -545,10 +566,10 @@ function StepOutput({ step, data }) {
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10B981' }}>YouTube 업로드 완료!</span>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--green)' }}>YouTube 업로드 완료!</span>
                   </div>
-                  {ym.title && <p style={{ fontSize: 13, fontWeight: 500, color: '#E8EEFF', margin: '0 0 14px', lineHeight: 1.4 }}>{ym.title}</p>}
+                  {ym.title && <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: '0 0 14px', lineHeight: 1.4 }}>{ym.title}</p>}
                   <a href={`https://www.youtube.com/watch?v=${vid}`} target="_blank" rel="noopener noreferrer"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, padding: '7px 16px', borderRadius: 8, background: '#EF4444', color: 'white', textDecoration: 'none' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -564,10 +585,10 @@ function StepOutput({ step, data }) {
               <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <span style={{ fontSize: 18, flexShrink: 0 }}>🔑</span>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#F59E0B', marginBottom: 6 }}>YouTube OAuth 설정 필요</div>
-                  <div style={{ fontSize: 12, color: '#D4A754', lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--amber)', marginBottom: 6 }}>YouTube OAuth 설정 필요</div>
+                  <div style={{ fontSize: 12, color: 'var(--amber)', lineHeight: 1.6 }}>
                     영상은 Step 6에서 확인하거나 MP4로 다운로드할 수 있습니다.<br/>
-                    YouTube 업로드를 원하시면 <code style={{ background: 'rgba(0,0,0,0.3)', padding: '1px 5px', borderRadius: 4 }}>GET /auth/youtube</code> 에서 OAuth 인증을 완료해주세요.
+                    YouTube 업로드를 원하시면 <code style={{ background: 'rgba(0,0,0,0.1)', padding: '1px 5px', borderRadius: 4 }}>GET /auth/youtube</code> 에서 OAuth 인증을 완료해주세요.
                   </div>
                 </div>
               </div>
@@ -576,11 +597,11 @@ function StepOutput({ step, data }) {
           {ym.title && (
             <Card>
               <Label>📋 YouTube 메타데이터</Label>
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#E8EEFF', margin: '0 0 6px' }}>{ym.title}</p>
-              {ym.description && <p style={{ fontSize: 12, color: '#A8B6CB', lineHeight: 1.6, margin: '0 0 10px' }}>{ym.description}</p>}
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 6px' }}>{ym.title}</p>
+              {ym.description && <p style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, margin: '0 0 10px' }}>{ym.description}</p>}
               {ym.tags?.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ym.tags.map((t, i) => <Tag key={i} color="#5B78F6">#{t}</Tag>)}
+                  {ym.tags.map((t, i) => <Tag key={i} color="var(--accent)">#{t}</Tag>)}
                 </div>
               )}
             </Card>
@@ -601,8 +622,8 @@ function InputField({ field, value, onChange }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 7 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#C8D4F0' }}>{field.label}</span>
-        {field.hint && <span style={{ fontSize: 11, color: '#8A9BBF' }}>— {field.hint}</span>}
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{field.label}</span>
+        {field.hint && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>— {field.hint}</span>}
       </div>
       {field.type === 'textarea' || field.type === 'textarea-urls' ? (
         <textarea value={value || ''} onChange={e => onChange(e.target.value)} placeholder={field.placeholder}
@@ -613,11 +634,11 @@ function InputField({ field, value, onChange }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
             onClick={() => onChange(!value)}
-            style={{ width: 44, height: 24, borderRadius: 12, background: value ? '#5B78F6' : '#253550', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+            style={{ width: 44, height: 24, borderRadius: 12, background: value ? 'var(--accent)' : 'var(--border)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
           >
             <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: value ? 23 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
           </button>
-          {field.hint && <span style={{ fontSize: 12, color: '#8A9BBF' }}>{field.hint}</span>}
+          {field.hint && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{field.hint}</span>}
         </div>
       ) : (
         <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder={field.placeholder}
@@ -634,12 +655,12 @@ function OptionField({ opt, value, onChange }) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#C8D4F0' }}>{opt.label}</span>
-          {opt.hint && <p style={{ margin: '2px 0 0', fontSize: 11, color: '#8A9BBF' }}>{opt.hint}</p>}
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{opt.label}</span>
+          {opt.hint && <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>{opt.hint}</p>}
         </div>
         <button
           onClick={() => onChange(!value)}
-          style={{ width: 44, height: 24, borderRadius: 12, background: value ? '#10B981' : '#253550', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+          style={{ width: 44, height: 24, borderRadius: 12, background: value ? 'var(--green)' : 'var(--border)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
         >
           <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'white', position: 'absolute', top: 3, left: value ? 23 : 3, transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
         </button>
@@ -650,11 +671,11 @@ function OptionField({ opt, value, onChange }) {
   if (opt.type === 'select') {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#C8D4F0' }}>{opt.label}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{opt.label}</span>
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {opt.options.map((o, i) => (
             <button key={o} onClick={() => onChange(o)}
-              style={{ padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 500, border: `1px solid ${value === o ? '#5B78F6' : '#253550'}`, background: value === o ? 'rgba(91,120,246,0.15)' : 'transparent', color: value === o ? '#5B78F6' : '#8A9BBF', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
+              style={{ padding: '4px 10px', borderRadius: 7, fontSize: 11, fontWeight: 500, border: `1px solid ${value === o ? 'var(--accent)' : 'var(--border)'}`, background: value === o ? 'var(--accent-dim)' : 'transparent', color: value === o ? 'var(--accent)' : 'var(--text-3)', cursor: 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
             >
               {opt.optionLabels?.[i] || o}
             </button>
@@ -843,14 +864,14 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, rgba(91,120,246,0.2), rgba(139,92,246,0.2))', border: '1px solid rgba(91,120,246,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
             {step.icon}
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#E8EEFF', letterSpacing: '-0.3px' }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>
               Step {step.num}: {step.name}
             </h2>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#8A9BBF', lineHeight: 1.5, maxWidth: 480 }}>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, maxWidth: 480 }}>
               {meta.desc}
             </p>
           </div>
@@ -884,11 +905,11 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
         })
         if (!active.length) return null
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'rgba(91,120,246,0.07)', border: '1px solid rgba(91,120,246,0.18)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'var(--accent-dim)', border: '1px solid var(--accent-border)' }}>
             <span style={{ fontSize: 13, flexShrink: 0 }}>✨</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#5B78F6', marginRight: 8 }}>프로젝트 설정 적용됨</span>
-              <span style={{ fontSize: 11, color: '#8A9BBF' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', marginRight: 8 }}>프로젝트 설정 적용됨</span>
+              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
                 {active.map(a => `${a.label}: ${a.value}`).join(' · ')}
               </span>
             </div>
@@ -902,8 +923,8 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
           <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
             <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#EF4444', marginBottom: 4 }}>오류 발생</div>
-              <div style={{ fontSize: 12, color: '#F87171', lineHeight: 1.5 }}>{error}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)', marginBottom: 4 }}>오류 발생</div>
+              <div style={{ fontSize: 12, color: 'var(--red)', lineHeight: 1.5 }}>{error}</div>
             </div>
           </div>
         </Card>
@@ -914,14 +935,14 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
         <Card>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, color: '#F59E0B', fontWeight: 500 }}>
+              <span style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 500 }}>
                 {progressMsg || '처리 중...'}
               </span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#F59E0B', fontVariantNumeric: 'tabular-nums' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--amber)', fontVariantNumeric: 'tabular-nums' }}>
                 {progress}%
               </span>
             </div>
-            <div style={{ height: 8, background: '#172336', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
               <div style={{
                 height: '100%',
                 background: 'linear-gradient(90deg, #F59E0B, #F97316)',
@@ -934,13 +955,13 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
               <div style={{ display: 'flex', gap: 4, flex: 1 }}>
                 {[20, 40, 60, 80, 100].map(milestone => (
-                  <div key={milestone} style={{ flex: 1, height: 3, borderRadius: 2, background: progress >= milestone ? '#F59E0B' : '#253550', transition: 'background 0.4s' }} />
+                  <div key={milestone} style={{ flex: 1, height: 3, borderRadius: 2, background: progress >= milestone ? 'var(--amber)' : 'var(--border)', transition: 'background 0.4s' }} />
                 ))}
               </div>
               <button
                 onClick={handleCancel}
                 disabled={cancelling}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(239,68,68,0.12)', color: '#F87171', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: cancelling ? 'not-allowed' : 'pointer', flexShrink: 0 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--red-dim)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: cancelling ? 'not-allowed' : 'pointer', flexShrink: 0 }}
                 onMouseEnter={e => { if (!cancelling) e.currentTarget.style.background='rgba(239,68,68,0.2)' }}
                 onMouseLeave={e => e.currentTarget.style.background='rgba(239,68,68,0.12)'}
               >
@@ -959,7 +980,7 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
             <span style={{ fontSize: 16 }}>📋</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#A78BFA' }}>대본 검토가 필요합니다</div>
-              <div style={{ fontSize: 12, color: '#C4B5FD', marginTop: 2 }}>아래 대본을 확인하고 수정한 후 승인하면 다음 단계로 진행됩니다.</div>
+              <div style={{ fontSize: 12, color: '#A78BFA', marginTop: 2 }}>아래 대본을 확인하고 수정한 후 승인하면 다음 단계로 진행됩니다.</div>
             </div>
           </div>
         </Card>
@@ -972,8 +993,8 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
           {meta.manualInputs?.length > 0 && (
             <Card>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5B78F6' }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#5B78F6', textTransform: 'uppercase', letterSpacing: '0.7px' }}>수동 입력</span>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.7px' }}>수동 입력</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {meta.manualInputs.map(f => (
@@ -985,22 +1006,22 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
 
           {/* Auto options (collapsible) */}
           {meta.autoOptions?.length > 0 && (
-            <div style={{ border: '1px solid #253550', borderRadius: 14, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
               <button
                 onClick={() => setOptionsOpen(o => !o)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: '#111A2E', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'var(--surface)', border: 'none', cursor: 'pointer', textAlign: 'left' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.7px' }}>자동 처리 옵션</span>
-                  <span style={{ fontSize: 11, color: '#8A9BBF', marginLeft: 4 }}>— 기본값으로도 바로 실행 가능</span>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)' }} />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.7px' }}>자동 처리 옵션</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>— 기본값으로도 바로 실행 가능</span>
                 </div>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A9BBF" strokeWidth="2" style={{ transform: optionsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" style={{ transform: optionsOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                   <path d="M6 9l6 6 6-6"/>
                 </svg>
               </button>
               {optionsOpen && (
-                <div style={{ padding: '14px 18px 16px', background: '#0E1723', borderTop: '1px solid #253550', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ padding: '14px 18px 16px', background: 'var(--surface-2)', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {meta.autoOptions.map(opt => (
                     <OptionField key={opt.key} opt={opt} value={options[opt.key]} onChange={v => setOption(opt.key, v)} />
                   ))}
@@ -1035,7 +1056,7 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
               <button
                 onClick={handleApproveScript}
                 disabled={approving || !scriptDraft.trim()}
-                style={{ marginTop: 12, width: '100%', padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: approving ? '#253550' : 'linear-gradient(135deg, #5B78F6, #8B5CF6)', color: approving ? '#8A9BBF' : 'white', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
+                style={{ marginTop: 12, width: '100%', padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: approving ? 'var(--border)' : 'linear-gradient(135deg, var(--accent), var(--accent-2))', color: approving ? 'var(--text-3)' : 'white', border: 'none', cursor: approving ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
               >
                 {approving ? '승인 중...' : '✓ 대본 승인 후 다음 단계로'}
               </button>
@@ -1048,9 +1069,9 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
       {step.num === 8 && !isDone && !isRunning && (
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444' }} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#EF4444', textTransform: 'uppercase', letterSpacing: '0.7px' }}>YouTube 메타데이터</span>
-            <span style={{ fontSize: 11, color: '#8A9BBF', marginLeft: 2 }}>— AI 생성값 자동 로드됨</span>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.7px' }}>YouTube 메타데이터</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 2 }}>— AI 생성값 자동 로드됨</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[
@@ -1063,14 +1084,14 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
                 {f.type === 'textarea' ? (
                   <textarea value={fields[f.key] || ''} onChange={e => setField(f.key, e.target.value)} placeholder={f.placeholder} rows={f.rows || 3}
                     style={{ ...inputStyle, resize: 'vertical' }}
-                    onFocus={e => e.target.style.borderColor='#5B78F6'}
-                    onBlur={e => e.target.style.borderColor='#253550'}
+                    onFocus={e => e.target.style.borderColor='var(--accent)'}
+                    onBlur={e => e.target.style.borderColor='var(--border)'}
                   />
                 ) : (
                   <input value={fields[f.key] || ''} onChange={e => setField(f.key, e.target.value)} placeholder={f.placeholder}
                     style={inputStyle}
-                    onFocus={e => e.target.style.borderColor='#5B78F6'}
-                    onBlur={e => e.target.style.borderColor='#253550'}
+                    onFocus={e => e.target.style.borderColor='var(--accent)'}
+                    onBlur={e => e.target.style.borderColor='var(--border)'}
                   />
                 )}
               </div>
@@ -1083,7 +1104,7 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
       {!isRunning && !isDone && !isAwaitingReview && (
         <button
           onClick={handleRun}
-          style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: 'linear-gradient(135deg, #5B78F6 0%, #7B68EE 100%)', color: 'white', border: 'none', cursor: 'pointer', transition: 'all 0.15s', letterSpacing: '0.3px' }}
+          style={{ width: '100%', padding: '14px', borderRadius: 12, fontSize: 14, fontWeight: 700, background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)', color: 'white', border: 'none', cursor: 'pointer', transition: 'all 0.15s', letterSpacing: '0.3px' }}
           onMouseEnter={e => { e.currentTarget.style.opacity = '0.9'; e.currentTarget.style.transform = 'translateY(-1px)' }}
           onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'none' }}
         >
@@ -1095,9 +1116,9 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
       {isDone && step.num !== 2 && (
         <button
           onClick={handleRun}
-          style={{ width: '100%', padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: 'transparent', color: '#8A9BBF', border: '1px solid #253550', cursor: 'pointer', transition: 'all 0.15s' }}
-          onMouseEnter={e => { e.currentTarget.style.background='#111A2E'; e.currentTarget.style.color='#E8EEFF' }}
-          onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='#8A9BBF' }}
+          style={{ width: '100%', padding: '10px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: 'transparent', color: 'var(--text-3)', border: '1px solid var(--border)', cursor: 'pointer', transition: 'all 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background='var(--surface-2)'; e.currentTarget.style.color='var(--text)' }}
+          onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='var(--text-3)' }}
         >
           ↺ 다시 실행
         </button>
@@ -1106,8 +1127,8 @@ export default function StepCard({ step, projectId, status, onStatusChange, proj
       {/* ── Output ── */}
       {(isDone || isAwaitingReview) && dataLoading && (
         <Card>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#8A9BBF', fontSize: 13 }}>
-            <div style={{ width: 16, height: 16, border: '2px solid #253550', borderTopColor: '#5B78F6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-3)', fontSize: 13 }}>
+            <div style={{ width: 16, height: 16, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
             결과물 로딩 중...
           </div>
         </Card>
@@ -1136,20 +1157,20 @@ function PlanningDocView({ doc }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
             {concept.main_theme && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#5B78F6', width: '4rem', flexShrink: 0, fontWeight: 500 }}>핵심 주제</span>
-                <span style={{ color: '#A8B6CB' }}>{concept.main_theme}</span>
+                <span style={{ color: 'var(--accent)', width: '4rem', flexShrink: 0, fontWeight: 500 }}>핵심 주제</span>
+                <span style={{ color: 'var(--text-2)' }}>{concept.main_theme}</span>
               </div>
             )}
             {concept.narrative_angle && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#5B78F6', width: '4rem', flexShrink: 0, fontWeight: 500 }}>앵글</span>
-                <span style={{ color: '#A8B6CB' }}>{concept.narrative_angle}</span>
+                <span style={{ color: 'var(--accent)', width: '4rem', flexShrink: 0, fontWeight: 500 }}>앵글</span>
+                <span style={{ color: 'var(--text-2)' }}>{concept.narrative_angle}</span>
               </div>
             )}
             {concept.unique_value_proposition && (
               <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#5B78F6', width: '4rem', flexShrink: 0, fontWeight: 500 }}>UVP</span>
-                <span style={{ color: '#A8B6CB' }}>{concept.unique_value_proposition}</span>
+                <span style={{ color: 'var(--accent)', width: '4rem', flexShrink: 0, fontWeight: 500 }}>UVP</span>
+                <span style={{ color: 'var(--text-2)' }}>{concept.unique_value_proposition}</span>
               </div>
             )}
           </div>
@@ -1161,8 +1182,8 @@ function PlanningDocView({ doc }) {
           <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
             {ctr.title_candidates.map((t, i) => (
               <li key={i} style={{ display: 'flex', gap: 8 }}>
-                <span style={{ color: '#F59E0B', fontWeight: 700, width: 16, flexShrink: 0 }}>{i + 1}.</span>
-                <span style={{ color: '#C8D4F0' }}>{t}</span>
+                <span style={{ color: 'var(--amber)', fontWeight: 700, width: 16, flexShrink: 0 }}>{i + 1}.</span>
+                <span style={{ color: 'var(--text)' }}>{t}</span>
               </li>
             ))}
           </ol>
@@ -1171,9 +1192,9 @@ function PlanningDocView({ doc }) {
       {hook.opening_hook && (
         <div>
           <Label>훅 &amp; 인트로</Label>
-          <div style={{ borderRadius: 8, padding: '8px 12px', marginBottom: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)' }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#F59E0B', margin: '0 0 4px' }}>오프닝 훅</p>
-            <p style={{ color: '#FDE68A', margin: 0 }}>"{hook.opening_hook}"</p>
+          <div style={{ borderRadius: 8, padding: '8px 12px', marginBottom: 8, background: 'var(--amber-dim)', border: '1px solid var(--amber-border)' }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', margin: '0 0 4px' }}>오프닝 훅</p>
+            <p style={{ color: 'var(--amber)', margin: 0 }}>"{hook.opening_hook}"</p>
           </div>
         </div>
       )}
@@ -1182,12 +1203,12 @@ function PlanningDocView({ doc }) {
           <Label>콘텐츠 구성 ({doc.estimated_duration || ''})</Label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {outline.map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: 12, borderRadius: 8, padding: '8px 12px', background: '#172336' }}>
-                <span style={{ fontSize: 11, width: 56, flexShrink: 0, paddingTop: 2, fontFamily: 'monospace', color: '#8A9BBF' }}>{s.timecode}</span>
+              <div key={i} style={{ display: 'flex', gap: 12, borderRadius: 8, padding: '8px 12px', background: 'var(--surface-2)' }}>
+                <span style={{ fontSize: 11, width: 56, flexShrink: 0, paddingTop: 2, fontFamily: 'monospace', color: 'var(--text-3)' }}>{s.timecode}</span>
                 <div>
-                  <p style={{ color: '#E8EEFF', fontWeight: 600, fontSize: 12, margin: '0 0 4px' }}>{s.section_name}</p>
+                  <p style={{ color: 'var(--text)', fontWeight: 600, fontSize: 12, margin: '0 0 4px' }}>{s.section_name}</p>
                   {s.key_points?.map((pt, j) => (
-                    <p key={j} style={{ fontSize: 11, color: '#8A9BBF', margin: '0 0 2px' }}>· {pt}</p>
+                    <p key={j} style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 2px' }}>· {pt}</p>
                   ))}
                 </div>
               </div>

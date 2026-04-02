@@ -19,13 +19,14 @@ IMAGE_PROVIDER           — "dalle3" (default) | "gemini" | "stabilityai" | "au
 """
 import base64
 import logging
-import os
 
 import httpx
 
+from app.utils.settings_store import get as _cfg
+
 logger = logging.getLogger(__name__)
 
-_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
+_STABILITY_URL = "https://api.stability.ai/v2beta/stable-image/generate/core"
 
 # ─── Genre-specific prompt styles ─────────────────────────────────────────────
 
@@ -49,10 +50,6 @@ def enhance_image_prompt(base_prompt: str, genre: str = "general") -> str:
     """
     style_suffix = GENRE_STYLES.get(genre.lower(), GENRE_STYLES["general"])
     return f"{base_prompt}, {style_suffix} --ar 16:9"
-_SD_KEY = os.getenv("STABLE_DIFFUSION_API_KEY", "")
-_GOOGLE_AI_KEY = os.getenv("GOOGLE_AI_API_KEY", "")
-_PROVIDER = os.getenv("IMAGE_PROVIDER", "dalle3").lower()
-_STABILITY_URL = "https://api.stability.ai/v2beta/stable-image/generate/core"
 
 
 # ─── Size helpers ─────────────────────────────────────────────────────────────
@@ -85,12 +82,13 @@ def _stability_aspect(width: int, height: int) -> str:
 async def _generate_dalle3(prompt: str, width: int, height: int) -> bytes:
     from openai import AsyncOpenAI  # local import keeps dependency optional
 
-    if not _OPENAI_KEY:
+    key = _cfg("OPENAI_API_KEY")
+    if not key:
         raise RuntimeError(
             "OPENAI_API_KEY is not set. Add it to your .env to use DALL-E 3."
         )
 
-    client = AsyncOpenAI(api_key=_OPENAI_KEY)
+    client = AsyncOpenAI(api_key=key)
     size = _dalle3_size(width, height)
 
     logger.info(f"[dalle3] Generating image {size} — prompt: {prompt[:80]}…")
@@ -109,7 +107,8 @@ async def _generate_dalle3(prompt: str, width: int, height: int) -> bytes:
 # ─── Stability AI ─────────────────────────────────────────────────────────────
 
 async def _generate_stability(prompt: str, width: int, height: int) -> bytes:
-    if not _SD_KEY:
+    key = _cfg("STABLE_DIFFUSION_API_KEY")
+    if not key:
         raise RuntimeError(
             "STABLE_DIFFUSION_API_KEY is not set. "
             "Add it to your .env to use Stability AI."
@@ -124,17 +123,19 @@ async def _generate_stability(prompt: str, width: int, height: int) -> bytes:
         resp = await client.post(
             _STABILITY_URL,
             headers={
-                "Authorization": f"Bearer {_SD_KEY}",
+                "Authorization": f"Bearer {key}",
                 "Accept": "image/*",
             },
-            data={
-                "prompt": prompt,
-                "aspect_ratio": aspect,
-                "output_format": "png",
-                "style_preset": "cinematic",
+            # Stability AI v2beta requires multipart/form-data — use files= not data=
+            files={
+                "prompt": (None, prompt[:2000]),
+                "aspect_ratio": (None, aspect),
+                "output_format": (None, "png"),
             },
         )
-        resp.raise_for_status()
+        if not resp.is_success:
+            body = resp.text[:300]
+            raise RuntimeError(f"Stability AI {resp.status_code}: {body}")
         return resp.content
 
 
@@ -154,35 +155,61 @@ def _gemini_aspect(width: int, height: int) -> str:
 
 
 async def _generate_gemini(prompt: str, width: int, height: int) -> bytes:
-    """Generate an image via Google Gemini Imagen 3 (google-genai SDK)."""
-    if not _GOOGLE_AI_KEY:
+    """Generate an image via Google Gemini (google-genai SDK).
+
+    Tries Imagen 4 (paid) first, falls back to gemini-2.0-flash-exp (free tier).
+    """
+    key = _cfg("GOOGLE_AI_API_KEY")
+    if not key:
         raise RuntimeError("GOOGLE_AI_API_KEY is not set.")
 
     import asyncio
     from google import genai
-    from google.genai.types import GenerateImagesConfig
+
+    loop = asyncio.get_event_loop()
+    client = genai.Client(api_key=key)
 
     aspect = _gemini_aspect(width, height)
     logger.info(f"[gemini] Generating image {aspect} — prompt: {prompt[:80]}…")
 
-    client = genai.Client(api_key=_GOOGLE_AI_KEY)
+    # ── Try Imagen 4 (paid plan) ──────────────────────────────────────────────
+    try:
+        from google.genai.types import GenerateImagesConfig
 
-    loop = asyncio.get_event_loop()
-    response = await loop.run_in_executor(
-        None,
-        lambda: client.models.generate_images(
-            model="imagen-3.0-generate-001",
-            prompt=prompt,
-            config=GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio=aspect,
-                output_mime_type="image/png",
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.models.generate_images(
+                model="imagen-4.0-generate-001",
+                prompt=prompt,
+                config=GenerateImagesConfig(
+                    number_of_images=1,
+                    aspect_ratio=aspect,
+                    output_mime_type="image/png",
+                ),
             ),
-        ),
-    )
-    if not response.generated_images:
-        raise RuntimeError("Gemini Imagen returned no images")
-    return response.generated_images[0].image.image_bytes
+        )
+        if response.generated_images:
+            return response.generated_images[0].image.image_bytes
+    except Exception as exc:
+        logger.info(f"[gemini] Imagen 4 unavailable ({exc.__class__.__name__}: {str(exc)[:80]}) — trying gemini-2.0-flash-exp")
+
+    # ── Fallback: gemini-2.5-flash-image via generate_content (paid plan) ──
+    from google.genai import types as genai_types
+
+    def _flash_generate() -> bytes:
+        resp = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=prompt[:800],
+            config=genai_types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+            ),
+        )
+        for part in resp.candidates[0].content.parts:
+            if part.inline_data is not None:
+                return part.inline_data.data
+        raise RuntimeError("gemini-2.5-flash-image returned no image parts")
+
+    return await loop.run_in_executor(None, _flash_generate)
 
 
 # ─── Placeholder generator (no external API required) ────────────────────────
@@ -250,17 +277,19 @@ async def generate_image(
     enriched_prompt = enhance_image_prompt(prompt, genre) if genre else prompt
 
     # Build ordered list of providers to try
-    selected = (provider_override or _PROVIDER or "dalle3").lower()
+    selected = (provider_override or _cfg("IMAGE_PROVIDER", "dalle3") or "dalle3").lower()
 
     _ALL = ["dalle3", "gemini", "stabilityai"]
     # Start with selected, then try others in default order
     order = [selected] + [p for p in _ALL if p != selected]
 
-    # Filter to providers that have keys configured
+    # Filter to providers that have keys configured (checked at call time)
     def _has_key(p: str) -> bool:
-        if p == "dalle3":      return bool(_OPENAI_KEY)
-        if p == "gemini":      return bool(_GOOGLE_AI_KEY)
-        if p == "stabilityai": return bool(_SD_KEY and _SD_KEY.strip() not in ("", "..."))
+        if p == "dalle3":      return bool(_cfg("OPENAI_API_KEY"))
+        if p == "gemini":      return bool(_cfg("GOOGLE_AI_API_KEY"))
+        if p == "stabilityai":
+            k = _cfg("STABLE_DIFFUSION_API_KEY")
+            return bool(k and k.strip() not in ("", "..."))
         return False
 
     available = [p for p in order if _has_key(p)]

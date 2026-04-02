@@ -25,9 +25,9 @@ from typing import Optional
 
 import httpx
 
-logger = logging.getLogger(__name__)
+from app.utils.settings_store import get as _cfg
 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+logger = logging.getLogger(__name__)
 _YT_BASE = "https://www.googleapis.com/youtube/v3"
 
 
@@ -49,7 +49,8 @@ async def fetch_video_details(video_id: str) -> dict:
         video_id, title, description, published_at,
         view_count, like_count, comment_count, top_comments (list[str])
     """
-    if not YOUTUBE_API_KEY:
+    yt_key = _cfg("YOUTUBE_API_KEY")
+    if not yt_key:
         logger.warning("[youtube_api] YOUTUBE_API_KEY not set — skipping metadata fetch")
         return {"video_id": video_id, "title": "", "top_comments": []}
 
@@ -60,7 +61,7 @@ async def fetch_video_details(video_id: str) -> dict:
             params={
                 "part": "snippet,statistics",
                 "id": video_id,
-                "key": YOUTUBE_API_KEY,
+                "key": yt_key,
             },
         )
         video_resp.raise_for_status()
@@ -91,7 +92,7 @@ async def fetch_video_details(video_id: str) -> dict:
                     "videoId": video_id,
                     "order": "relevance",
                     "maxResults": 20,
-                    "key": YOUTUBE_API_KEY,
+                    "key": yt_key,
                 },
             )
             comments_resp.raise_for_status()
@@ -125,10 +126,11 @@ async def search_videos(keyword: str, max_results: int = 5) -> list[str]:
         List of ``https://www.youtube.com/watch?v=...`` URLs.
         Returns an empty list if YOUTUBE_API_KEY is not configured.
     """
-    if not YOUTUBE_API_KEY or YOUTUBE_API_KEY.strip() in ("", "..."):
+    yt_key = _cfg("YOUTUBE_API_KEY")
+    if not yt_key or yt_key.strip() in ("", "..."):
         logger.warning(
             "[youtube_api] YOUTUBE_API_KEY not set — cannot auto-search videos. "
-            "Add YOUTUBE_API_KEY to your .env file."
+            "Add YOUTUBE_API_KEY to Settings or .env file."
         )
         return []
 
@@ -142,7 +144,7 @@ async def search_videos(keyword: str, max_results: int = 5) -> list[str]:
                 "order": "viewCount",
                 "maxResults": max_results,
                 "relevanceLanguage": "ko",
-                "key": YOUTUBE_API_KEY,
+                "key": yt_key,
             },
         )
         resp.raise_for_status()
@@ -252,14 +254,15 @@ def _build_youtube_service(token_json: str):
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
+# Module-level store: state → Flow object (preserves code_verifier across requests)
+_pending_flows: dict = {}
+
+
 def get_oauth_auth_url(redirect_uri: str) -> str:
     """Generate the Google OAuth2 authorization URL.
 
-    The user visits this URL, grants access, and is redirected to
-    `redirect_uri?code=...&state=...`.
-
-    Requires YOUTUBE_CLIENT_SECRETS_JSON env var.
-    Returns the authorization URL string.
+    Stores the Flow object (including PKCE code_verifier) by state so
+    exchange_oauth_code() can reuse it on the callback.
     """
     from google_auth_oauthlib.flow import Flow
 
@@ -273,20 +276,21 @@ def get_oauth_auth_url(redirect_uri: str) -> str:
         scopes=_SCOPES,
         redirect_uri=redirect_uri,
     )
-    auth_url, _ = flow.authorization_url(
+    auth_url, state = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        prompt="consent",           # always prompt → always returns refresh_token
+        prompt="consent",
     )
+    # Persist flow so the callback can reuse the same code_verifier
+    _pending_flows[state] = flow
     return auth_url
 
 
-def exchange_oauth_code(code: str, redirect_uri: str) -> str:
+def exchange_oauth_code(code: str, redirect_uri: str, state: str = "") -> str:
     """Exchange an OAuth2 authorization code for a token JSON string.
 
-    Returns:
-        JSON string containing token, refresh_token, client_id, client_secret,
-        token_uri, and scopes — suitable for storing as YOUTUBE_OAUTH_TOKEN_JSON.
+    Reuses the Flow object stored during get_oauth_auth_url() to supply
+    the PKCE code_verifier that Google requires.
     """
     from google_auth_oauthlib.flow import Flow
 
@@ -294,15 +298,18 @@ def exchange_oauth_code(code: str, redirect_uri: str) -> str:
     if not client_secrets_json:
         raise RuntimeError("YOUTUBE_CLIENT_SECRETS_JSON env var not set")
 
+    # Retrieve the stored flow (has the correct code_verifier)
+    flow = _pending_flows.pop(state, None)
+    if flow is None:
+        # Fallback: create a fresh flow (works only when PKCE was not used)
+        client_config = json.loads(client_secrets_json)
+        flow = Flow.from_client_config(client_config, scopes=_SCOPES, redirect_uri=redirect_uri)
+    else:
+        flow.redirect_uri = redirect_uri
+
     client_config = json.loads(client_secrets_json)
-    client_data = (
-        client_config.get("installed") or client_config.get("web") or {}
-    )
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=_SCOPES,
-        redirect_uri=redirect_uri,
-    )
+    client_data = client_config.get("installed") or client_config.get("web") or {}
+
     flow.fetch_token(code=code)
     creds = flow.credentials
     token_data = {

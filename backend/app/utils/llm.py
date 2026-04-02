@@ -6,16 +6,11 @@ Priority:
 """
 import json
 import logging
-import os
 from typing import Any
 
+from app.utils.settings_store import get as _cfg
+
 logger = logging.getLogger(__name__)
-
-_ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
-
-# Which provider to use
-_PROVIDER = "anthropic" if _ANTHROPIC_KEY else "openai"
 
 # Model names
 _ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
@@ -68,13 +63,13 @@ async def chat_json(
 
     Tries Anthropic first, then OpenAI.  Raises on total failure.
     """
-    if _ANTHROPIC_KEY:
+    if _cfg("ANTHROPIC_API_KEY"):
         return await _anthropic_json(system, user, temperature, max_tokens)
-    if _OPENAI_KEY:
+    if _cfg("OPENAI_API_KEY"):
         return await _openai_json(system, user, temperature, max_tokens)
     raise RuntimeError(
         "AI API key not configured. "
-        "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env"
+        "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env or Settings"
     )
 
 
@@ -85,13 +80,13 @@ async def chat_text(
     max_tokens: int = 8192,
 ) -> str:
     """Send a chat request and return plain text response."""
-    if _ANTHROPIC_KEY:
+    if _cfg("ANTHROPIC_API_KEY"):
         return await _anthropic_text(system, user, temperature, max_tokens)
-    if _OPENAI_KEY:
+    if _cfg("OPENAI_API_KEY"):
         return await _openai_text(system, user, temperature, max_tokens)
     raise RuntimeError(
         "AI API key not configured. "
-        "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env"
+        "Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env or Settings"
     )
 
 
@@ -100,7 +95,7 @@ async def chat_text(
 async def _anthropic_json(system: str, user: str, temperature: float, max_tokens: int) -> dict:
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=_ANTHROPIC_KEY)
+    client = anthropic.AsyncAnthropic(api_key=_cfg("ANTHROPIC_API_KEY"))
     msg = await client.messages.create(
         model=_ANTHROPIC_MODEL,
         max_tokens=max_tokens,
@@ -125,7 +120,7 @@ async def _anthropic_json(system: str, user: str, temperature: float, max_tokens
 async def _anthropic_text(system: str, user: str, temperature: float, max_tokens: int) -> str:
     import anthropic
 
-    client = anthropic.AsyncAnthropic(api_key=_ANTHROPIC_KEY)
+    client = anthropic.AsyncAnthropic(api_key=_cfg("ANTHROPIC_API_KEY"))
     msg = await client.messages.create(
         model=_ANTHROPIC_MODEL,
         max_tokens=max_tokens,
@@ -141,7 +136,7 @@ async def _anthropic_text(system: str, user: str, temperature: float, max_tokens
 async def _openai_json(system: str, user: str, temperature: float, max_tokens: int) -> dict:
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=_OPENAI_KEY)
+    client = AsyncOpenAI(api_key=_cfg("OPENAI_API_KEY"))
     resp = await client.chat.completions.create(
         model=_OPENAI_MODEL,
         messages=[
@@ -158,7 +153,7 @@ async def _openai_json(system: str, user: str, temperature: float, max_tokens: i
 async def _openai_text(system: str, user: str, temperature: float, max_tokens: int) -> str:
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=_OPENAI_KEY)
+    client = AsyncOpenAI(api_key=_cfg("OPENAI_API_KEY"))
     resp = await client.chat.completions.create(
         model=_OPENAI_MODEL,
         messages=[

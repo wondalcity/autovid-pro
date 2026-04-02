@@ -36,6 +36,18 @@ _FPS = "30"
 _VIDEO_CODEC = ["libx264", "-preset", "fast", "-crf", "23"]
 
 
+def _hw_video_codec() -> list[str]:
+    """Return h264_videotoolbox flags on macOS, else fall back to libx264."""
+    result = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-encoders"],
+        capture_output=True, text=True,
+    )
+    if "h264_videotoolbox" in result.stdout:
+        # q:v 65 ≈ CRF 23 quality for VideoToolbox
+        return ["h264_videotoolbox", "-q:v", "65"]
+    return _VIDEO_CODEC
+
+
 # ─── Internal helpers ─────────────────────────────────────────────────────────
 
 def _check_ffmpeg() -> None:
@@ -114,12 +126,17 @@ async def image_to_clip(
 ) -> None:
     """Convert a still image to an H.264 video clip of `duration` seconds.
 
-    Applies a subtle Ken Burns zoom (1x → 1.06x) for visual interest.
-    Falls back to a static frame if the zoom filter fails.
+    Applies a subtle Ken Burns zoom (1x → 1.05x) for visual interest.
+    Uses h264_videotoolbox on macOS for hardware-accelerated encoding.
+    Falls back to a static frame if zoompan fails.
     """
+    hw_codec = _hw_video_codec()
+    frames = int(duration * int(_FPS))
+
+    # scale=3840:-1 (2× output) is enough for zoompan — 8000 was unnecessarily large
     zoom_filter = (
-        f"scale=8000:-1,"
-        f"zoompan=z='min(zoom+0.0008,1.06)':d={int(duration * int(_FPS))}:"
+        f"scale=3840:-1,"
+        f"zoompan=z='min(zoom+0.0006,1.05)':d={frames}:"
         f"s={_RESOLUTION},setsar=1,setpts=PTS-STARTPTS"
     )
     try:
@@ -129,13 +146,13 @@ async def image_to_clip(
             "-i", str(image_path),
             "-vf", zoom_filter,
             "-t", str(duration),
-            "-c:v", *_VIDEO_CODEC,
+            "-c:v", *hw_codec,
             "-r", _FPS,
             "-pix_fmt", "yuv420p",
             str(output_path),
         ])
     except RuntimeError:
-        # Fallback: simple scale + pad without zoom
+        # Fallback: simple scale + pad without zoom (fastest path)
         logger.warning(
             "[ffmpeg] zoompan failed for %s — using static frame", image_path.name
         )
@@ -148,7 +165,7 @@ async def image_to_clip(
                 f"pad={_RESOLUTION}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
             ),
             "-t", str(duration),
-            "-c:v", *_VIDEO_CODEC,
+            "-c:v", *hw_codec,
             "-r", _FPS,
             "-pix_fmt", "yuv420p",
             str(output_path),
@@ -181,7 +198,7 @@ async def normalise_clip(input_path: Path, output_path: Path) -> None:
             f"scale={_RESOLUTION}:force_original_aspect_ratio=decrease,"
             f"pad={_RESOLUTION}:(ow-iw)/2:(oh-ih)/2:black,setsar=1"
         ),
-        "-c:v", *_VIDEO_CODEC,
+        "-c:v", *_hw_video_codec(),
         "-r", _FPS,
         "-pix_fmt", "yuv420p",
         "-an",          # strip audio — will be replaced by TTS
@@ -243,6 +260,43 @@ async def merge_audio(
     logger.info("[ffmpeg] audio merged → %s", output_path.name)
 
 
+# ─── Background music mix ─────────────────────────────────────────────────────
+
+async def mix_bg_music(
+    video_path: Path,
+    music_path: Path,
+    output_path: Path,
+    music_volume: float = 0.12,
+) -> None:
+    """Mix background music under the TTS voice track.
+
+    The music is looped if shorter than the video, and ducked to `music_volume`
+    (0.0–1.0) so the TTS narration stays clearly audible.
+    """
+    # amix weights: TTS=1.0 (full), music=music_volume (ducked)
+    filter_graph = (
+        f"[1:a]volume={music_volume:.3f}[bg];"
+        f"[0:a][bg]amix=inputs=2:duration=first:weights=1 1[outa]"
+    )
+    await _run_async([
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-stream_loop", "-1",       # loop music to cover the full video length
+        "-i", str(music_path),
+        "-filter_complex", filter_graph,
+        "-map", "0:v:0",
+        "-map", "[outa]",
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k",
+        str(output_path),
+    ])
+    logger.info(
+        "[ffmpeg] bg music mixed (vol=%.0f%%) → %s",
+        music_volume * 100,
+        output_path.name,
+    )
+
+
 # ─── Subtitle attachment ──────────────────────────────────────────────────────
 
 async def add_subtitles(
@@ -295,14 +349,17 @@ async def add_subtitles(
 async def build_final_video(
     voice_url: str,
     caption_url: Optional[str],
-    video_rows: list[dict],     # assets rows: {scene_id, file_path, metadata}
-    image_rows: list[dict],     # fallback image rows
-    storyboard_rows: list[dict],# for timestamp → duration
+    video_rows: list[dict],       # assets rows: {scene_id, file_path, metadata}
+    image_rows: list[dict],       # fallback image rows
+    storyboard_rows: list[dict],  # for timestamp → duration
     burn_subtitles: bool = False,
+    bg_music_bytes: Optional[bytes] = None,
+    bg_music_volume: float = 0.12,
 ) -> bytes:
     """Orchestrate the full editing pipeline and return final MP4 bytes.
 
     Precedence per scene:  video clip  >  image still  >  black placeholder
+    Pipeline: concat → TTS merge → [bg music mix] → subtitles → final MP4
     """
     _check_ffmpeg()
 
@@ -371,6 +428,16 @@ async def build_final_video(
         # ── Merge TTS audio ─────────────────────────────────────────────────
         with_audio_path = tmpdir / "with_audio.mp4"
         await merge_audio(concat_path, voice_path, with_audio_path)
+
+        # ── Mix background music (optional) ──────────────────────────────────
+        if bg_music_bytes:
+            music_path = tmpdir / "bg_music.mp3"
+            music_path.write_bytes(bg_music_bytes)
+            with_music_path = tmpdir / "with_music.mp4"
+            await mix_bg_music(with_audio_path, music_path, with_music_path, bg_music_volume)
+            with_audio_path = with_music_path  # hand off to subtitle step
+        else:
+            logger.info("[ffmpeg] No background music — skipping music mix")
 
         # ── Add subtitles ────────────────────────────────────────────────────
         if srt_path and srt_path.exists() and srt_path.stat().st_size > 0:

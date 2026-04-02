@@ -22,11 +22,11 @@ import os
 
 import httpx
 
+from app.utils.settings_store import get as _cfg
+
 logger = logging.getLogger(__name__)
 
-_RUNWAY_KEY = os.getenv("RUNWAY_API_KEY", "")
 _SVD_URL = os.getenv("SVD_SERVER_URL", "")
-_PROVIDER = os.getenv("VIDEO_PROVIDER", "").lower()
 
 _RUNWAY_BASE = "https://api.dev.runwayml.com/v1"
 _RUNWAY_HEADERS = {
@@ -47,13 +47,14 @@ async def _generate_via_runway(
     Calls /image_to_video, then polls /tasks/{id} until SUCCEEDED.
     Timeout: 3 minutes.
     """
+    runway_key = _cfg("RUNWAY_API_KEY")
     image_b64 = base64.b64encode(image_bytes).decode()
 
     async with httpx.AsyncClient(timeout=30) as client:
         # ── Submit task ──────────────────────────────────────────────────
         submit_resp = await client.post(
             f"{_RUNWAY_BASE}/image_to_video",
-            headers={**_RUNWAY_HEADERS, "Authorization": f"Bearer {_RUNWAY_KEY}"},
+            headers={**_RUNWAY_HEADERS, "Authorization": f"Bearer {runway_key}"},
             json={
                 "model": "gen3a_turbo",
                 "promptImage": f"data:image/png;base64,{image_b64}",
@@ -72,7 +73,7 @@ async def _generate_via_runway(
             await asyncio.sleep(2)
             poll_resp = await client.get(
                 f"{_RUNWAY_BASE}/tasks/{task_id}",
-                headers={"Authorization": f"Bearer {_RUNWAY_KEY}"},
+                headers={"Authorization": f"Bearer {runway_key}"},
             )
             poll_resp.raise_for_status()
             task = poll_resp.json()
@@ -147,34 +148,42 @@ async def generate_video(
     image_bytes: bytes,
     video_prompt: str,
     duration_seconds: int = 5,
+    provider_override: str = "",
 ) -> bytes:
     """Generate a short video clip from a still image.
 
     Args:
-        image_bytes:      Source image (PNG/JPEG bytes).
-        video_prompt:     Camera movement / motion description.
-                          e.g. "slow pan right", "zoom in gradually".
-        duration_seconds: Target clip length in seconds (3–10 s recommended).
+        image_bytes:       Source image (PNG/JPEG bytes).
+        video_prompt:      Camera movement / motion description.
+        duration_seconds:  Target clip length in seconds (3–10 s recommended).
+        provider_override: "runway" | "svd" | "none" | "" (auto-detect).
+                           "none" skips video generation entirely.
 
     Returns:
         MP4 video bytes.
 
     Raises:
-        NotImplementedError: If no video provider is configured.
+        NotImplementedError: If provider is "none", not configured, or no key set.
         RuntimeError:        If the provider call fails.
     """
-    # Auto-select provider
-    provider = _PROVIDER
-    if not provider:
-        provider = "runway" if _RUNWAY_KEY else ("svd" if _SVD_URL else "")
+    selected = (provider_override or "").lower()
 
-    if provider == "runway" and _RUNWAY_KEY:
+    if selected == "none":
+        raise NotImplementedError("Video generation disabled by user selection.")
+
+    runway_key = _cfg("RUNWAY_API_KEY")
+    if selected == "runway" or (not selected and runway_key):
+        if not runway_key:
+            raise NotImplementedError("RUNWAY_API_KEY is not set.")
         return await _generate_via_runway(image_bytes, video_prompt, duration_seconds)
 
-    if provider == "svd" and _SVD_URL:
+    if selected == "svd" or (not selected and _SVD_URL):
+        if not _SVD_URL:
+            raise NotImplementedError("SVD_SERVER_URL is not set.")
         return await _generate_via_svd(image_bytes, video_prompt, duration_seconds)
 
     raise NotImplementedError(
         "Video generation not configured. "
-        "Set RUNWAY_API_KEY (Runway ML) or SVD_SERVER_URL (local SVD) in .env."
+        "Set RUNWAY_API_KEY (Runway ML) or SVD_SERVER_URL (local SVD) in .env, "
+        "or set video_provider to 'none' to skip."
     )

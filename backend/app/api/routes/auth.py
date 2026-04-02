@@ -44,7 +44,7 @@ async def youtube_auth_start():
 
 
 @router.get("/youtube/callback", summary="Handle YouTube OAuth2 callback")
-async def youtube_auth_callback(code: str = "", error: str = ""):
+async def youtube_auth_callback(code: str = "", error: str = "", state: str = ""):
     """Exchange the authorization code for an OAuth2 token.
 
     On success, returns JSON containing the token.
@@ -63,7 +63,7 @@ async def youtube_auth_callback(code: str = "", error: str = ""):
         )
 
     try:
-        token_json = exchange_oauth_code(code=code, redirect_uri=_redirect_uri())
+        token_json = exchange_oauth_code(code=code, redirect_uri=_redirect_uri(), state=state)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Token exchange failed: {exc}")
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getProjects, createProject, deleteProject } from '../lib/api'
 import ProjectCard from '../components/ProjectCard'
 
@@ -14,16 +15,16 @@ const PIPELINE_STEPS = [
 ]
 
 const GENRE_OPTIONS = [
-  { value: 'general',  label: '일반 범용',        icon: '🎯' },
-  { value: 'finance',  label: '금융/비즈니스',     icon: '💹' },
-  { value: 'mystery',  label: '미스터리/흥미',     icon: '🔮' },
-  { value: 'history',  label: '역사/다큐',         icon: '📜' },
+  { value: 'general',  label: '일반 범용',      icon: '🎯' },
+  { value: 'finance',  label: '금융/비즈니스',   icon: '💹' },
+  { value: 'mystery',  label: '미스터리/흥미',   icon: '🔮' },
+  { value: 'history',  label: '역사/다큐',       icon: '📜' },
 ]
 const TONE_OPTIONS = [
-  { value: 'professional',   label: '전문적' },
-  { value: 'friendly',       label: '친근한' },
-  { value: 'educational',    label: '교육적' },
-  { value: 'entertainment',  label: '엔터테인먼트' },
+  { value: 'professional',  label: '전문적' },
+  { value: 'friendly',      label: '친근한' },
+  { value: 'educational',   label: '교육적' },
+  { value: 'entertainment', label: '엔터테인먼트' },
 ]
 const DURATION_OPTIONS = [
   { value: '5',  label: '5분' },
@@ -32,9 +33,9 @@ const DURATION_OPTIONS = [
   { value: '20', label: '20분' },
 ]
 const PRIVACY_OPTIONS = [
-  { value: 'public',    label: '공개' },
-  { value: 'unlisted',  label: '미등록' },
-  { value: 'private',   label: '비공개' },
+  { value: 'public',   label: '공개' },
+  { value: 'unlisted', label: '미등록' },
+  { value: 'private',  label: '비공개' },
 ]
 
 const DEFAULT_SETTINGS = { keyword: '', genre: 'general', tone: 'professional', target_duration: '10', privacy: 'public' }
@@ -43,14 +44,52 @@ function saveProjectDefaults(projectId, settings) {
   try { localStorage.setItem(`autovid-defaults-${projectId}`, JSON.stringify(settings)) } catch {}
 }
 
+/* ── Shared field label ─────────────────────────────────────────────── */
+function FieldLabel({ children, sub }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+        {children}
+      </label>
+      {sub && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-3)', textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>{sub}</span>}
+    </div>
+  )
+}
+
+/* ── Option button (pill/chip style) ───────────────────────────────── */
+function OptionBtn({ active, onClick, children, style }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '7px 12px',
+        borderRadius: 'var(--radius-sm)',
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+        background: active ? 'var(--accent-dim)' : 'transparent',
+        color: active ? 'var(--text)' : 'var(--text-2)',
+        fontSize: 13,
+        fontWeight: active ? 600 : 400,
+        cursor: 'pointer',
+        transition: 'all 0.15s',
+        textAlign: 'left',
+        fontFamily: 'var(--font)',
+        ...style,
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [newTitle, setNewTitle] = useState('')
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS })
-  const [modalStep, setModalStep] = useState(1) // 1=title+keyword, 2=settings
+  const [modalStep, setModalStep] = useState(1)
 
   const resetModal = () => { setNewTitle(''); setSettings({ ...DEFAULT_SETTINGS }); setModalStep(1) }
 
@@ -75,8 +114,7 @@ export default function Dashboard() {
       const res = await createProject(newTitle.trim())
       const projectId = res.data?.id
       if (projectId) {
-        const defaults = { ...settings, keyword: settings.keyword || newTitle.trim() }
-        saveProjectDefaults(projectId, defaults)
+        saveProjectDefaults(projectId, { ...settings, keyword: settings.keyword || newTitle.trim() })
       }
       resetModal()
       setShowCreate(false)
@@ -98,92 +136,112 @@ export default function Dashboard() {
   }
 
   const inProgress = projects.filter(p => p.current_step > 0 && p.current_step < 8)
-  const completed = projects.filter(p => p.current_step >= 8)
+  const completed  = projects.filter(p => p.current_step >= 8)
   const notStarted = projects.filter(p => !p.current_step || p.current_step === 0)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080B12', color: '#E8EEFF', fontFamily: 'inherit' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' }}>
 
-      {/* Sticky Nav */}
+      {/* ── Nav ──────────────────────────────────────────────────────── */}
       <header style={{
         position: 'sticky', top: 0, zIndex: 100,
-        height: 60, display: 'flex', alignItems: 'center',
-        background: '#0C1018',
-        borderBottom: '1px solid #253550',
-        padding: '0 32px',
+        height: 56, display: 'flex', alignItems: 'center',
+        background: 'var(--surface)',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 28px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 1200, margin: '0 auto' }}>
+
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 34, height: 34, borderRadius: 10,
-              background: 'linear-gradient(135deg, #5B78F6, #8B5CF6)',
+              width: 32, height: 36, borderRadius: 9,
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 15, flexShrink: 0,
+              fontSize: 14, flexShrink: 0, color: '#fff',
             }}>▶</div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#E8EEFF', lineHeight: 1.2 }}>AutoVidPro</div>
-              <div style={{ fontSize: 11, color: '#8A9BBF', lineHeight: 1.2 }}>AI 기반 YouTube 영상 자동화</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px', lineHeight: 1.2 }}>AutoVidPro</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.2, fontWeight: 400 }}>AI YouTube 자동화</div>
             </div>
           </div>
 
-          {/* New project button */}
-          <button
-            onClick={() => setShowCreate(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              background: '#5B78F6', color: 'white',
-              border: 'none', borderRadius: 10, cursor: 'pointer',
-              padding: '0 18px', height: 38, fontSize: 13, fontWeight: 600,
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = '#6B88FF'}
-            onMouseLeave={e => e.currentTarget.style.background = '#5B78F6'}
-          >
-            <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
-            새 프로젝트
-          </button>
+          {/* Right actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="nav-btn"
+              onClick={() => navigate('/settings')}
+              style={{ padding: '0 14px', height: 38, fontSize: 13 }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+              </svg>
+              설정
+            </button>
+
+            <button
+              className="btn-primary"
+              onClick={() => setShowCreate(true)}
+              style={{ padding: '0 16px', height: 38, fontSize: 13 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              새 프로젝트
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Create project modal */}
+      {/* ── Create modal ─────────────────────────────────────────────── */}
       {showCreate && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 200,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(8,11,18,0.88)',
-          backdropFilter: 'blur(8px)',
-        }}
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(12, 28, 60, 0.48)',
+            backdropFilter: 'blur(12px)',
+          }}
           onClick={e => { if (e.target === e.currentTarget) { setShowCreate(false); resetModal() } }}
         >
-          <div style={{
-            background: '#111A2E', border: '1px solid #253550',
-            borderRadius: 18, padding: '28px',
-            width: '100%', maxWidth: 500,
-            boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
+          <div className="slide-up" style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '28px',
+            width: '100%', maxWidth: 480,
+            boxShadow: '0 24px 80px rgba(12,28,60,0.2)',
           }}>
-            {/* Modal header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg, #5B78F6, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🎬</div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#E8EEFF', margin: 0 }}>새 프로젝트 만들기</h3>
-                <p style={{ fontSize: 11, color: '#8A9BBF', margin: '2px 0 0' }}>설정값은 각 단계의 기본값으로 자동 채워집니다</p>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32, height: 36, borderRadius: 9,
+                  background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15,
+                }}>🎬</div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.3px' }}>새 프로젝트</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>설정값은 각 단계에 자동 적용됩니다</div>
+                </div>
               </div>
-              {/* Step indicator */}
-              <div style={{ display: 'flex', gap: 4 }}>
+              {/* Step dots */}
+              <div style={{ display: 'flex', gap: 5 }}>
                 {[1, 2].map(n => (
-                  <div key={n} style={{ width: 22, height: 4, borderRadius: 2, background: modalStep >= n ? '#5B78F6' : '#253550', transition: 'background 0.2s' }} />
+                  <div key={n} style={{
+                    width: 20, height: 3, borderRadius: 2,
+                    background: modalStep >= n ? 'var(--accent)' : 'var(--border)',
+                    transition: 'background 0.2s',
+                  }} />
                 ))}
               </div>
             </div>
 
-            {/* Step 1: Title + Keyword */}
+            {/* Step 1 */}
             {modalStep === 1 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} className="fade-in">
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 }}>
-                    프로젝트 제목 <span style={{ color: '#EF4444' }}>*</span>
-                  </label>
+                  <FieldLabel>프로젝트 제목 <span style={{ color: 'var(--red)' }}>*</span></FieldLabel>
                   <input
                     autoFocus
                     type="text"
@@ -194,90 +252,89 @@ export default function Dashboard() {
                       if (e.key === 'Escape') { setShowCreate(false); resetModal() }
                     }}
                     placeholder="예: ETF 투자 완전 가이드 2025"
-                    style={{ width: '100%', background: '#172336', border: '1px solid #253550', borderRadius: 12, padding: '12px 14px', fontSize: 14, color: '#E8EEFF', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color 0.15s' }}
-                    onFocus={e => e.target.style.borderColor = '#5B78F6'}
-                    onBlur={e => e.target.style.borderColor = '#253550'}
+                    style={{
+                      width: '100%', background: 'var(--surface-3)',
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                      padding: '10px 13px', fontSize: 14, color: 'var(--text)',
+                      outline: 'none', fontFamily: 'var(--font)', transition: 'border-color 0.15s',
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 }}>
-                    검색 키워드 / 주제
-                    <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', color: '#4A6080', marginLeft: 6 }}>Step 1 벤치마킹에 사용</span>
-                  </label>
+                  <FieldLabel sub="Step 1 벤치마킹에 사용">검색 키워드 / 주제</FieldLabel>
                   <input
                     type="text"
                     value={settings.keyword}
                     onChange={e => setSettings(s => ({ ...s, keyword: e.target.value }))}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && newTitle.trim()) setModalStep(2)
-                    }}
+                    onKeyDown={e => { if (e.key === 'Enter' && newTitle.trim()) setModalStep(2) }}
                     placeholder="예: ETF 투자 방법, 주식 초보 가이드"
-                    style={{ width: '100%', background: '#172336', border: '1px solid #253550', borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#E8EEFF', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color 0.15s' }}
-                    onFocus={e => e.target.style.borderColor = '#5B78F6'}
-                    onBlur={e => e.target.style.borderColor = '#253550'}
+                    style={{
+                      width: '100%', background: 'var(--surface-3)',
+                      border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                      padding: '10px 13px', fontSize: 14, color: 'var(--text)',
+                      outline: 'none', fontFamily: 'var(--font)', transition: 'border-color 0.15s',
+                    }}
+                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                    onBlur={e => e.target.style.borderColor = 'var(--border)'}
                   />
-                  <p style={{ fontSize: 11, color: '#4A6080', margin: '6px 0 0' }}>비워두면 프로젝트 제목이 키워드로 사용됩니다</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 5 }}>비워두면 프로젝트 제목이 키워드로 사용됩니다</p>
                 </div>
-                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                  <button onClick={() => { setShowCreate(false); resetModal() }}
-                    style={{ flex: 1, height: 42, borderRadius: 10, border: '1px solid #253550', background: '#172336', color: '#A8B6CB', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button
+                    onClick={() => { setShowCreate(false); resetModal() }}
+                    className="nav-btn"
+                    style={{ flex: 1, height: 44, justifyContent: 'center', fontSize: 13 }}
+                  >
                     취소
                   </button>
-                  <button onClick={() => setModalStep(2)} disabled={!newTitle.trim()}
-                    style={{ flex: 2, height: 42, borderRadius: 10, border: 'none', background: !newTitle.trim() ? '#253550' : '#5B78F6', color: !newTitle.trim() ? '#8A9BBF' : 'white', fontSize: 13, fontWeight: 600, cursor: !newTitle.trim() ? 'not-allowed' : 'pointer' }}>
+                  <button
+                    onClick={() => setModalStep(2)}
+                    disabled={!newTitle.trim()}
+                    className="btn-primary"
+                    style={{ flex: 2, height: 44, justifyContent: 'center', fontSize: 13, opacity: !newTitle.trim() ? 0.4 : 1, cursor: !newTitle.trim() ? 'not-allowed' : 'pointer' }}
+                  >
                     다음 — 콘텐츠 설정 →
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Step 2: Content settings */}
+            {/* Step 2 */}
             {modalStep === 2 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }} className="fade-in">
                 {/* Genre */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 10 }}>
-                    콘텐츠 장르
-                    <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', color: '#4A6080', marginLeft: 6 }}>Step 5 이미지 스타일에 반영</span>
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <FieldLabel sub="Step 5 이미지 스타일에 반영">콘텐츠 장르</FieldLabel>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {GENRE_OPTIONS.map(g => (
-                      <button key={g.value} onClick={() => setSettings(s => ({ ...s, genre: g.value }))}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, border: `1px solid ${settings.genre === g.value ? '#5B78F6' : '#253550'}`, background: settings.genre === g.value ? 'rgba(91,120,246,0.12)' : '#172336', color: settings.genre === g.value ? '#E8EEFF' : '#A8B6CB', fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-                        <span style={{ fontSize: 16 }}>{g.icon}</span>
-                        {g.label}
-                      </button>
+                      <OptionBtn key={g.value} active={settings.genre === g.value} onClick={() => setSettings(s => ({ ...s, genre: g.value }))}>
+                        <span style={{ marginRight: 6 }}>{g.icon}</span>{g.label}
+                      </OptionBtn>
                     ))}
                   </div>
                 </div>
 
-                {/* Tone + Duration side by side */}
+                {/* Tone + Duration */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 }}>
-                      말투 스타일
-                      <span style={{ display: 'block', fontSize: 10, fontWeight: 400, textTransform: 'none', color: '#4A6080', marginTop: 1 }}>Step 2 대본에 반영</span>
-                    </label>
+                    <FieldLabel sub="Step 2 대본에 반영">말투 스타일</FieldLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {TONE_OPTIONS.map(t => (
-                        <button key={t.value} onClick={() => setSettings(s => ({ ...s, tone: t.value }))}
-                          style={{ padding: '7px 11px', borderRadius: 8, border: `1px solid ${settings.tone === t.value ? '#5B78F6' : '#253550'}`, background: settings.tone === t.value ? 'rgba(91,120,246,0.12)' : 'transparent', color: settings.tone === t.value ? '#5B78F6' : '#8A9BBF', fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+                        <OptionBtn key={t.value} active={settings.tone === t.value} onClick={() => setSettings(s => ({ ...s, tone: t.value }))}>
                           {t.label}
-                        </button>
+                        </OptionBtn>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 }}>
-                      목표 영상 길이
-                      <span style={{ display: 'block', fontSize: 10, fontWeight: 400, textTransform: 'none', color: '#4A6080', marginTop: 1 }}>Step 2 대본에 반영</span>
-                    </label>
+                    <FieldLabel sub="Step 2 대본에 반영">영상 길이</FieldLabel>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {DURATION_OPTIONS.map(d => (
-                        <button key={d.value} onClick={() => setSettings(s => ({ ...s, target_duration: d.value }))}
-                          style={{ padding: '7px 11px', borderRadius: 8, border: `1px solid ${settings.target_duration === d.value ? '#5B78F6' : '#253550'}`, background: settings.target_duration === d.value ? 'rgba(91,120,246,0.12)' : 'transparent', color: settings.target_duration === d.value ? '#5B78F6' : '#8A9BBF', fontSize: 12, fontWeight: 500, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
+                        <OptionBtn key={d.value} active={settings.target_duration === d.value} onClick={() => setSettings(s => ({ ...s, target_duration: d.value }))}>
                           {d.label}
-                        </button>
+                        </OptionBtn>
                       ))}
                     </div>
                   </div>
@@ -285,28 +342,27 @@ export default function Dashboard() {
 
                 {/* Privacy */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#8A9BBF', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: 8 }}>
-                    업로드 공개 설정
-                    <span style={{ fontSize: 10, fontWeight: 400, textTransform: 'none', color: '#4A6080', marginLeft: 6 }}>Step 8 업로드에 반영</span>
-                  </label>
+                  <FieldLabel sub="Step 8 업로드에 반영">업로드 공개 설정</FieldLabel>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {PRIVACY_OPTIONS.map(p => (
-                      <button key={p.value} onClick={() => setSettings(s => ({ ...s, privacy: p.value }))}
-                        style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${settings.privacy === p.value ? '#5B78F6' : '#253550'}`, background: settings.privacy === p.value ? 'rgba(91,120,246,0.12)' : 'transparent', color: settings.privacy === p.value ? '#5B78F6' : '#8A9BBF', fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <OptionBtn key={p.value} active={settings.privacy === p.value} onClick={() => setSettings(s => ({ ...s, privacy: p.value }))} style={{ flex: 1, textAlign: 'center' }}>
                         {p.label}
-                      </button>
+                      </OptionBtn>
                     ))}
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                  <button onClick={() => setModalStep(1)}
-                    style={{ height: 42, padding: '0 18px', borderRadius: 10, border: '1px solid #253550', background: '#172336', color: '#A8B6CB', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button onClick={() => setModalStep(1)} className="nav-btn" style={{ height: 44, padding: '0 16px', fontSize: 13 }}>
                     ← 이전
                   </button>
-                  <button onClick={handleCreate} disabled={creating}
-                    style={{ flex: 1, height: 42, borderRadius: 10, border: 'none', background: creating ? '#253550' : 'linear-gradient(135deg, #5B78F6, #8B5CF6)', color: creating ? '#8A9BBF' : 'white', fontSize: 13, fontWeight: 700, cursor: creating ? 'not-allowed' : 'pointer' }}>
-                    {creating ? '생성 중...' : '🚀 프로젝트 생성'}
+                  <button
+                    onClick={handleCreate}
+                    disabled={creating}
+                    className="btn-primary"
+                    style={{ flex: 1, height: 44, justifyContent: 'center', fontSize: 13, opacity: creating ? 0.6 : 1 }}
+                  >
+                    {creating ? '생성 중…' : '🚀 프로젝트 생성'}
                   </button>
                 </div>
               </div>
@@ -315,43 +371,45 @@ export default function Dashboard() {
         </div>
       )}
 
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px 64px' }}>
+      {/* ── Main ─────────────────────────────────────────────────────── */}
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '0 28px 80px' }}>
 
-        {/* Hero section */}
-        <div style={{ padding: '56px 0 40px', textAlign: 'center' }}>
+        {/* Hero */}
+        <div style={{ padding: '52px 0 36px', textAlign: 'center' }}>
           <h1 style={{
-            fontSize: 40, fontWeight: 800, color: '#E8EEFF',
-            background: 'linear-gradient(135deg, #E8EEFF 0%, #8B5CF6 60%, #5B78F6 100%)',
+            fontSize: 42, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.15,
+            background: 'linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%)',
             WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text', margin: '0 0 12px', lineHeight: 1.15,
+            backgroundClip: 'text', margin: '0 0 10px',
           }}>
             YouTube 영상, 8단계로 자동 완성
           </h1>
-          <p style={{ fontSize: 15, color: '#A8B6CB', margin: '0 0 36px', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 15, color: 'var(--text-2)', margin: '0 0 32px', lineHeight: 1.7, fontWeight: 400 }}>
             벤치마킹부터 YouTube 업로드까지 — AI가 전 과정을 자동화합니다
           </p>
 
-          {/* Pipeline step pills */}
+          {/* Pipeline pills */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            flexWrap: 'wrap', gap: 0, marginBottom: projects.length > 0 ? 36 : 0,
+            flexWrap: 'wrap', gap: 0, marginBottom: projects.length > 0 ? 28 : 0,
           }}>
             {PIPELINE_STEPS.map((s, idx) => (
               <div key={s.num} style={{ display: 'flex', alignItems: 'center' }}>
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
-                  background: '#111A2E', border: '1px solid #253550',
-                  borderRadius: 20, padding: '6px 12px',
-                  fontSize: 12, fontWeight: 500, color: '#A8B6CB',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 20, padding: '5px 11px',
+                  fontSize: 12, fontWeight: 500, color: 'var(--text-2)',
                   whiteSpace: 'nowrap',
                 }}>
                   <span style={{ fontSize: 13 }}>{s.icon}</span>
-                  <span>{s.name}</span>
+                  {s.name}
                 </div>
                 {idx < PIPELINE_STEPS.length - 1 && (
-                  <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M2 5h6M6 2l3 3-3 3" stroke="#253550" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <div style={{ width: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5h6M6 2l3 3-3 3" stroke="var(--text-3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
                   </div>
                 )}
@@ -359,25 +417,27 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Stats strip — only when projects exist */}
+          {/* Stats */}
           {projects.length > 0 && !loading && (
             <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 0,
-              background: '#111A2E', border: '1px solid #253550',
-              borderRadius: 12, overflow: 'hidden',
+              display: 'inline-flex',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              overflow: 'hidden',
             }}>
               {[
-                { label: '전체', value: projects.length, color: '#5B78F6' },
-                { label: '진행 중', value: inProgress.length, color: '#F59E0B' },
-                { label: '완료', value: completed.length, color: '#10B981' },
+                { label: '전체', value: projects.length, color: 'var(--accent)' },
+                { label: '진행 중', value: inProgress.length, color: 'var(--amber)' },
+                { label: '완료', value: completed.length, color: 'var(--green)' },
               ].map((stat, i) => (
                 <div key={i} style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  padding: '12px 28px',
-                  borderRight: i < 2 ? '1px solid #253550' : 'none',
+                  padding: '10px 24px',
+                  borderRight: i < 2 ? '1px solid var(--border)' : 'none',
                 }}>
-                  <span style={{ fontSize: 22, fontWeight: 700, color: stat.color, lineHeight: 1 }}>{stat.value}</span>
-                  <span style={{ fontSize: 11, color: '#8A9BBF', marginTop: 4 }}>{stat.label}</span>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: stat.color, letterSpacing: '-0.5px', lineHeight: 1 }}>{stat.value}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 3, fontWeight: 500, letterSpacing: '0.3px', textTransform: 'uppercase' }}>{stat.label}</span>
                 </div>
               ))}
             </div>
@@ -386,85 +446,56 @@ export default function Dashboard() {
 
         {/* Content */}
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 14 }}>
             {[1, 2, 3].map(i => (
               <div key={i} style={{
-                height: 160, borderRadius: 16, background: '#111A2E',
-                border: '1px solid #253550',
-              }} className="animate-pulse" />
+                height: 150, borderRadius: 'var(--radius-lg)',
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                animation: 'pulse-dot 1.5s ease-in-out infinite',
+              }} />
             ))}
           </div>
         ) : projects.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', textAlign: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '72px 0', textAlign: 'center' }}>
             <div style={{
-              width: 72, height: 72, borderRadius: 20, marginBottom: 20,
-              background: '#111A2E', border: '1px solid #253550',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+              width: 64, height: 64, borderRadius: 18, marginBottom: 18,
+              background: 'var(--surface-2)', border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28,
             }}>🎬</div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#E8EEFF', margin: '0 0 10px' }}>첫 프로젝트를 만들어보세요</h2>
-            <p style={{ fontSize: 14, color: '#8A9BBF', margin: '0 0 28px', lineHeight: 1.6 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '0 0 8px', letterSpacing: '-0.3px' }}>첫 프로젝트를 만들어보세요</h2>
+            <p style={{ fontSize: 14, color: 'var(--text-2)', margin: '0 0 24px', lineHeight: 1.7 }}>
               벤치마킹부터 YouTube 업로드까지 8단계 자동화
             </p>
             <button
+              className="btn-primary"
               onClick={() => setShowCreate(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: '#5B78F6', color: 'white',
-                border: 'none', borderRadius: 10, cursor: 'pointer',
-                padding: '0 22px', height: 44, fontSize: 14, fontWeight: 600,
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = '#6B88FF'}
-              onMouseLeave={e => e.currentTarget.style.background = '#5B78F6'}
+              style={{ padding: '0 22px', height: 46, fontSize: 14 }}
             >
-              <span style={{ fontSize: 18 }}>+</span> 새 프로젝트 시작
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              새 프로젝트 시작
             </button>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
-
-            {inProgress.length > 0 && (
-              <section>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }} />
-                  <h2 style={{ fontSize: 12, fontWeight: 600, color: '#A8B6CB', margin: 0, letterSpacing: '0.5px' }}>
-                    진행 중 ({inProgress.length})
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
+            {[
+              { label: '진행 중', items: inProgress, dot: 'var(--amber)' },
+              { label: '시작 전', items: notStarted, dot: 'var(--text-3)' },
+              { label: '완료',   items: completed,  dot: 'var(--green)' },
+            ].filter(g => g.items.length > 0).map(group => (
+              <section key={group.label}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: group.dot, flexShrink: 0 }} />
+                  <h2 style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', margin: 0, letterSpacing: '0.6px', textTransform: 'uppercase' }}>
+                    {group.label} <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>({group.items.length})</span>
                   </h2>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-                  {inProgress.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} />)}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: 12 }}>
+                  {group.items.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} />)}
                 </div>
               </section>
-            )}
-
-            {notStarted.length > 0 && (
-              <section>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#8A9BBF', flexShrink: 0 }} />
-                  <h2 style={{ fontSize: 12, fontWeight: 600, color: '#A8B6CB', margin: 0, letterSpacing: '0.5px' }}>
-                    시작 전 ({notStarted.length})
-                  </h2>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-                  {notStarted.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} />)}
-                </div>
-              </section>
-            )}
-
-            {completed.length > 0 && (
-              <section>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />
-                  <h2 style={{ fontSize: 12, fontWeight: 600, color: '#A8B6CB', margin: 0, letterSpacing: '0.5px' }}>
-                    완료 ({completed.length})
-                  </h2>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-                  {completed.map(p => <ProjectCard key={p.id} project={p} onDelete={handleDelete} />)}
-                </div>
-              </section>
-            )}
-
+            ))}
           </div>
         )}
       </main>
